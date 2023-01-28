@@ -1,5 +1,7 @@
 package cmdx
 
+import "context"
+
 type Receiver interface {
-	Action()
+	Action(ctx context.Context) error
 }

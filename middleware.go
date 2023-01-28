@@ -17,7 +17,8 @@ func (f MiddlewareFunc) Decorate(cmd Command) Command {
 }
 
 // Chain decorates the given Command with all middlewares.
-func Chain(cmd Command, middlewares ...Middleware) (chain Command) {
+func Chain(cmd Command, middlewares ...Middleware) Command {
+	var chain Command
 	chain = cmd
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		chain = middlewares[i].Decorate(chain)

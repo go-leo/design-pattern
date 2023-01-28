@@ -93,36 +93,36 @@ func TestInvokerRedoCommand(t *testing.T) {
 func TestInvokerMultiCommand(t *testing.T) {
 	invoker := new(Invoker)
 	number := 0
-	_, err := invoker.Call(context.Background(), NewDefaultCommand(
-		func(ctx context.Context) (context.Context, error) {
+	_, err := invoker.Call(context.Background(), NewRichCommand(
+		CommandFunc(func(ctx context.Context) (context.Context, error) {
 			number++
 			return ctx, nil
-		},
-		func(ctx context.Context) (context.Context, error) {
+		}),
+		UndoCommandFunc(func(ctx context.Context) (context.Context, error) {
 			number--
 			return ctx, nil
-		},
-		func(ctx context.Context) (context.Context, error) {
+		}),
+		RedoCommandFunc(func(ctx context.Context) (context.Context, error) {
 			number++
 			return ctx, nil
-		},
+		}),
 	))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, number)
 
-	_, err = invoker.Call(context.Background(), NewDefaultCommand(
-		func(ctx context.Context) (context.Context, error) {
+	_, err = invoker.Call(context.Background(), NewRichCommand(
+		CommandFunc(func(ctx context.Context) (context.Context, error) {
 			number += 10
 			return ctx, nil
-		},
-		func(ctx context.Context) (context.Context, error) {
+		}),
+		UndoCommandFunc(func(ctx context.Context) (context.Context, error) {
 			number -= 10
 			return ctx, nil
-		},
-		func(ctx context.Context) (context.Context, error) {
+		}),
+		RedoCommandFunc(func(ctx context.Context) (context.Context, error) {
 			number += 10
 			return ctx, nil
-		},
+		}),
 	))
 	assert.NoError(t, err)
 	assert.Equal(t, 11, number)
@@ -147,19 +147,19 @@ func TestInvokerMultiCommand(t *testing.T) {
 	assert.ErrorIs(t, ErrNotFoundRedoCommand, err)
 	assert.Equal(t, 11, number)
 
-	_, err = invoker.Call(context.Background(), NewDefaultCommand( // nolint
-		func(ctx context.Context) (context.Context, error) {
+	_, err = invoker.Call(context.Background(), NewRichCommand( // nolint
+		CommandFunc(func(ctx context.Context) (context.Context, error) {
 			number += 20
 			return ctx, nil
-		},
-		func(ctx context.Context) (context.Context, error) {
+		}),
+		UndoCommandFunc(func(ctx context.Context) (context.Context, error) {
 			number -= 20
 			return ctx, nil
-		},
-		func(ctx context.Context) (context.Context, error) {
+		}),
+		RedoCommandFunc(func(ctx context.Context) (context.Context, error) {
 			number += 20
 			return ctx, nil
-		},
+		}),
 	))
 
 	_, err = invoker.Redo(context.Background())
