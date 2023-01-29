@@ -1,4 +1,4 @@
-package cmdx
+package command
 
 // Middleware allows us to write something like decorators to Command.
 // It can execute something before Execute or after.

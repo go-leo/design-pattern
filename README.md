@@ -1,1 +1,1 @@
-# cmdx
+# design pattern

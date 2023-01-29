@@ -1,4 +1,4 @@
-package cmdx
+package command
 
 import "context"
 
