@@ -1,4 +1,4 @@
-module github.com/go-leo/cmdx
+module github.com/go-leo/design-pattern
 
 go 1.19
 
