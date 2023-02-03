@@ -1,4 +1,5 @@
 package ddd
 
-type Aggregate interface {
+type Aggregate[T any, ID any] interface {
+	Root() Entity[T, ID]
 }
