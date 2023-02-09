@@ -16,26 +16,26 @@ type Specification[T any] interface {
 	Not(another Specification[T]) Specification[T]
 }
 
-type specification[T any] struct {
+type BaseSpecification[T any] struct {
 	isSatisfiedBy func(t T) bool
 }
 
 func New[T any](isSatisfiedBy func(t T) bool) Specification[T] {
-	return &specification[T]{isSatisfiedBy: isSatisfiedBy}
+	return &BaseSpecification[T]{isSatisfiedBy: isSatisfiedBy}
 }
 
-func (spec *specification[T]) IsSatisfiedBy(t T) bool {
+func (spec *BaseSpecification[T]) IsSatisfiedBy(t T) bool {
 	return spec.isSatisfiedBy(t)
 }
 
-func (spec *specification[T]) And(another Specification[T]) Specification[T] {
+func (spec *BaseSpecification[T]) And(another Specification[T]) Specification[T] {
 	return And[T](spec, another)
 }
 
-func (spec *specification[T]) Or(another Specification[T]) Specification[T] {
+func (spec *BaseSpecification[T]) Or(another Specification[T]) Specification[T] {
 	return Or[T](spec, another)
 }
 
-func (spec *specification[T]) Not(another Specification[T]) Specification[T] {
+func (spec *BaseSpecification[T]) Not(another Specification[T]) Specification[T] {
 	return Not[T](another)
 }
