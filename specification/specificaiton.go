@@ -1,11 +1,13 @@
 package specification
 
+import "context"
+
 // Specification interface.
 // Use BaseSpecification as base for creating specifications, and
 // only the method isSatisfiedBy(Object) must be implemented.
 type Specification[T any] interface {
 	// IsSatisfiedBy check if t is satisfied by the specification.
-	IsSatisfiedBy(t T) bool
+	IsSatisfiedBy(ctx context.Context, t T) bool
 	// And create a new specification that is the AND operation of the current specification and
 	// another specification.
 	And(another Specification[T]) Specification[T]
@@ -17,15 +19,15 @@ type Specification[T any] interface {
 }
 
 type BaseSpecification[T any] struct {
-	isSatisfiedBy func(t T) bool
+	isSatisfiedBy func(ctx context.Context, t T) bool
 }
 
-func New[T any](isSatisfiedBy func(t T) bool) Specification[T] {
+func New[T any](isSatisfiedBy func(ctx context.Context, t T) bool) Specification[T] {
 	return &BaseSpecification[T]{isSatisfiedBy: isSatisfiedBy}
 }
 
-func (spec *BaseSpecification[T]) IsSatisfiedBy(t T) bool {
-	return spec.isSatisfiedBy(t)
+func (spec *BaseSpecification[T]) IsSatisfiedBy(ctx context.Context, t T) bool {
+	return spec.isSatisfiedBy(ctx, t)
 }
 
 func (spec *BaseSpecification[T]) And(another Specification[T]) Specification[T] {
