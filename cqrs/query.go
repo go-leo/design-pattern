@@ -2,6 +2,9 @@ package cqrs
 
 import "context"
 
+// QueryHandler is a query handler that to queries to read data.
+// Queries never modify the database.
+// A query returns a DTO that does not encapsulate any domain knowledge.
 type QueryHandler[Q any, R any] interface {
 	Handle(ctx context.Context, q Q) (R, error)
 }
