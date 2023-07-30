@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/go-leo/design-pattern/cqrs/cmd/internal"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/types/pluginpb"
 )
@@ -19,6 +20,9 @@ func main() {
 		fmt.Printf("protoc-gen-go-gors %v\n", version)
 		return
 	}
+
+	fmt.Printf(internal.CommandTmpl)
+	fmt.Printf(internal.QueryTmpl)
 
 	var flags flag.FlagSet
 	pathToLower = flags.Bool("path_to_lower", false, "make path to lower case")

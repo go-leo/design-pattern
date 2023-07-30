@@ -1,0 +1,23 @@
+package {{ .Package }}
+
+import (
+	"context"
+	"github.com/go-leo/design-pattern/cqrs"
+)
+
+type {{ .Endpoint }}Cmd struct {
+}
+
+type {{ .Endpoint }} cqrs.CommandHandler[*ExecCmd]
+
+func New{{ .Endpoint }}() {{ .Endpoint }} {
+	return &exec{}
+}
+
+type {{ .LowerEndpoint }} struct {
+}
+
+func (h *{{ .LowerEndpoint }}) Handle(ctx context.Context, cmd *{{ .Endpoint }}Cmd) error {
+	//TODO implement me
+	panic("implement me")
+}

@@ -1,0 +1,26 @@
+package {{ .Package }}
+
+import (
+	"context"
+	"github.com/go-leo/design-pattern/cqrs"
+)
+
+type DemoQuery struct {
+}
+
+type DemoResult struct {
+}
+
+type Demo cqrs.QueryHandler[*DemoQuery, *DemoResult]
+
+func NewDemo() Demo {
+	return &demo{}
+}
+
+type demo struct {
+}
+
+func (h *demo) Handle(ctx context.Context, q *DemoQuery) (*DemoResult, error) {
+	//TODO implement me
+	panic("implement me")
+}
