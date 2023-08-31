@@ -12,10 +12,11 @@ type CommandHandler[C any] interface {
 }
 
 // The CommandHandlerFunc type is an adapter to allow the use of ordinary functions as CommandHandler.
-// If f is a function with the appropriate signature, CommandHandlerFunc(f) is a CommandHandler that calls f.
-type CommandHandlerFunc[C any] func(ctx context.Context, cmd C) error
+type CommandHandlerFunc[C any] struct {
+	f func(ctx context.Context, cmd C) error
+}
 
 // Handle calls f(ctx).
 func (f CommandHandlerFunc[C]) Handle(ctx context.Context, cmd C) error {
-	return f(ctx, cmd)
+	return f.f(ctx, cmd)
 }

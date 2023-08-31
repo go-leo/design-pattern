@@ -5,12 +5,10 @@ import (
 	"github.com/go-leo/design-pattern/endpoint"
 )
 
-type emptyResponse struct{}
-
 // CommandEndpoint convert CommandHandler to Endpoint
-func CommandEndpoint[C any](h CommandHandler[C]) endpoint.Endpoint[C, emptyResponse] {
-	return endpoint.EndpointFunc[C, emptyResponse](func(ctx context.Context, request C) (emptyResponse, error) {
-		return emptyResponse{}, h.Handle(ctx, request)
+func CommandEndpoint[C any](h CommandHandler[C]) endpoint.Endpoint[C, struct{}] {
+	return endpoint.EndpointFunc[C, struct{}](func(ctx context.Context, request C) (struct{}, error) {
+		return struct{}{}, h.Handle(ctx, request)
 	})
 }
 

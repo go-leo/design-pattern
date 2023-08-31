@@ -109,11 +109,10 @@ func main() {
 				func(i int, e1 *ast.Comment) string { return e1.Text },
 			)
 			file := internal.NewFileFromComment(endpoint, queryAbs, commandAbs, comments)
-			if file != nil {
-				files = append(files, file)
+			if file == nil {
 				continue
 			}
-			files = append(files, internal.NewQueryFile(endpoint, queryAbs))
+			files = append(files, file)
 		}
 	}
 

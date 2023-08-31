@@ -63,11 +63,10 @@ func getFileInfo(gen *protogen.Plugin, file *protogen.File, service *protogen.Se
 			// Unary RPC method
 			endpoint := method.GoName
 			file := internal.NewFileFromComment(endpoint, queryAbs, commandAbs, splitComment(method.Comments.Leading.String()))
-			if file != nil {
-				files = append(files, file)
+			if file == nil {
 				continue
 			}
-			files = append(files, internal.NewQueryFile(endpoint, queryAbs))
+			files = append(files, file)
 		} else {
 			// Streaming RPC method
 			continue

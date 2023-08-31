@@ -12,12 +12,13 @@ type QueryHandler[Q any, R any] interface {
 }
 
 // The QueryHandlerFunc type is an adapter to allow the use of ordinary functions as QueryHandler.
-// If f is a function with the appropriate signature, QueryHandlerFunc(f) is a QueryHandler that calls f.
-type QueryHandlerFunc[Q any, R any] func(ctx context.Context, q Q) (R, error)
+type QueryHandlerFunc[Q any, R any] struct {
+	f func(ctx context.Context, q Q) (R, error)
+}
 
 // Handle calls f(ctx).
 func (f QueryHandlerFunc[Q, R]) Handle(ctx context.Context, q Q) (R, error) {
-	return f(ctx, q)
+	return f.f(ctx, q)
 }
 
 // NoopQuery is an QueryHandler that does nothing and returns a nil error.
