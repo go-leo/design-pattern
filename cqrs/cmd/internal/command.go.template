@@ -5,13 +5,17 @@ import (
 	"github.com/go-leo/design-pattern/cqrs"
 )
 
+type {{ .Endpoint }}Assembler[Req any] interface {
+    From{{ .Endpoint }}Request(ctx context.Context, req Req) (*{{ .Endpoint }}Cmd, error)
+}
+
 type {{ .Endpoint }}Cmd struct {
 }
 
-type {{ .Endpoint }} cqrs.CommandHandler[*ExecCmd]
+type {{ .Endpoint }} cqrs.CommandHandler[*{{ .Endpoint }}Cmd]
 
 func New{{ .Endpoint }}() {{ .Endpoint }} {
-	return &exec{}
+	return &{{ .LowerEndpoint }}{}
 }
 
 type {{ .LowerEndpoint }} struct {

@@ -8,25 +8,15 @@ import (
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
-const version = "v1.4.3"
-
-var pathToLower *bool
-var requireUnimplemented *bool
-
 func main() {
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *showVersion {
-		fmt.Printf("protoc-gen-go-gors %v\n", version)
+		fmt.Printf("protoc-gen-go-gors %v\n", internal.Version)
 		return
 	}
 
-	fmt.Printf(internal.CommandTmpl)
-	fmt.Printf(internal.QueryTmpl)
-
 	var flags flag.FlagSet
-	pathToLower = flags.Bool("path_to_lower", false, "make path to lower case")
-	requireUnimplemented = flags.Bool("require_unimplemented_servers", true, "set to false to match legacy behavior")
 	protogen.Options{ParamFunc: flags.Set}.Run(func(gen *protogen.Plugin) error {
 		gen.SupportedFeatures = uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
 		for _, f := range gen.Files {

@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/go-leo/gors v1.4.5
-	github.com/go-leo/gox v0.0.0-20230727124507-8b044dd98e30
+	github.com/go-leo/gox v0.0.0-20230801121903-9027f85d213c
 	github.com/stretchr/testify v1.8.1
 	golang.org/x/exp v0.0.0-20230728194245-b0cb94b80691
 	golang.org/x/tools v0.11.0
