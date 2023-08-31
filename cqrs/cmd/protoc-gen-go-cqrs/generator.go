@@ -14,11 +14,6 @@ import (
 	"strings"
 )
 
-const (
-	metadataPackage = protogen.GoImportPath("google.golang.org/grpc/metadata")
-	contextPackage  = protogen.GoImportPath("context")
-)
-
 func generateFile(gen *protogen.Plugin, file *protogen.File) {
 	if len(file.Services) == 0 {
 		return
@@ -50,9 +45,6 @@ func getFileInfo(gen *protogen.Plugin, file *protogen.File, service *protogen.Se
 	path := internal.NewPath(splitComment(service.Comments.Leading.String()))
 	if len(path.Command) == 0 || len(path.Query) == 0 {
 		return nil, errors.New(`QueryPath or CommandPath is empty`)
-	}
-	for key, val := range gen.FilesByPath {
-		fmt.Println(key, val)
 	}
 	cwd, _ := os.Getwd()
 	queryAbs := filepath.Join(filepath.Dir(filepath.Join(cwd, file.Desc.Path())), path.Query)

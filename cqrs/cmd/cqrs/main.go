@@ -99,9 +99,7 @@ func main() {
 				log.Fatalf("error: func %s not convert to *ast.FuncType", methodName)
 			}
 			endpoint := methodName.String()
-
 			if method.Doc == nil {
-				files = append(files, internal.NewQueryFile(endpoint, queryAbs))
 				continue
 			}
 			comments := slicex.Map[[]*ast.Comment, []string](
