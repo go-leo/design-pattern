@@ -31,10 +31,9 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File) {
 		}
 		for _, f := range files {
 			if err := f.Gen(); err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "%s.%s error: %s\n", service.Desc.FullName(), f.Endpoint, err)
+				_, _ = fmt.Fprintf(os.Stderr, "%s.%s error: %s \n", service.Desc.FullName(), f.Endpoint, err)
 				continue
 			}
-			_, _ = fmt.Fprintf(os.Stdout, "%s.%s wrote %s\n", service.Desc.FullName(), f.Endpoint, f.AbsFilename)
 		}
 	}
 }
