@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	dp "github.com/go-leo/design-pattern"
 	"github.com/go-leo/design-pattern/cqrs/cmd/internal"
 	"github.com/go-leo/gox/slicex"
 	"go/ast"
@@ -35,7 +36,7 @@ func main() {
 	flag.Usage = Usage
 	flag.Parse()
 	if *showVersion {
-		fmt.Printf("cqrs %v\n", internal.Version)
+		fmt.Printf("cqrs %v\n", dp.Version)
 		return
 	}
 

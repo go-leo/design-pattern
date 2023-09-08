@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/go-leo/design-pattern/cqrs/cmd/internal"
+	dp "github.com/go-leo/design-pattern"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/types/pluginpb"
 )
@@ -12,7 +12,7 @@ func main() {
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *showVersion {
-		fmt.Printf("protoc-gen-go-gors %v\n", internal.Version)
+		fmt.Printf("protoc-gen-go-gors %v\n", dp.Version)
 		return
 	}
 
