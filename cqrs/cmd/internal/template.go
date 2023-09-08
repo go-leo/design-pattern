@@ -3,7 +3,6 @@ package internal
 import (
 	_ "embed"
 	"errors"
-	"fmt"
 	"os"
 	"text/template"
 )
@@ -47,7 +46,7 @@ func (v File) GenQuery() error {
 	if err != nil {
 		return err
 	}
-	return fmt.Errorf("file %s already exists", v.AbsFilename)
+	return nil
 }
 
 func (v File) GenCommand() error {
@@ -66,5 +65,5 @@ func (v File) GenCommand() error {
 	if err != nil {
 		return err
 	}
-	return fmt.Errorf("file %s already exists", v.AbsFilename)
+	return nil
 }
