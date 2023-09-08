@@ -63,9 +63,10 @@ func main() {
 	}
 
 	var files []*internal.File
-	if serviceDecl != nil && serviceSpec != nil && serviceType != nil && len(serviceMethods) > 0 {
+	if serviceDecl != nil && serviceDecl != nil && serviceType != nil && len(serviceMethods) > 0 {
+		serviceName := serviceSpec.Name.String()
 		if serviceDecl == nil || serviceDecl.Doc == nil {
-			log.Println("not found", serviceSpec.Name.String(), "annotation:", `"@CQRS @QueryPath() @CommandPath()"`)
+			log.Println("not found", serviceName, "annotation:", `"@CQRS @QueryPath() @CommandPath()"`)
 			os.Exit(2)
 		}
 		var comments []string
@@ -74,7 +75,7 @@ func main() {
 		}
 		path := internal.NewPath(comments)
 		if len(path.Command) == 0 || len(path.Query) == 0 {
-			log.Println(`QueryPath or CommandPath is empty`)
+			log.Printf(`%s QueryPath or CommandPath is empty\n`, serviceName)
 			os.Exit(2)
 		}
 
