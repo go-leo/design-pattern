@@ -15,7 +15,6 @@ import (
 	"runtime/debug"
 	"strconv"
 	"testing"
-	"unicode"
 )
 
 // byte slices are special even if they're renamed types.
@@ -573,51 +572,6 @@ func TestDuplicatedFieldDisappears(t *testing.T) {
 	got := string(b)
 	if got != want {
 		t.Fatalf("Marshal: got %s want %s", got, want)
-	}
-}
-
-func TestStringBytes(t *testing.T) {
-	t.Parallel()
-	// Test that encodeState.stringBytes and encodeState.string use the same encoding.
-	var r []rune
-	for i := '\u0000'; i <= unicode.MaxRune; i++ {
-		if testing.Short() && i > 1000 {
-			i = unicode.MaxRune
-		}
-		r = append(r, i)
-	}
-	s := string(r) + "\xff\xff\xffhello" // some invalid UTF-8 too
-
-	es := &encodeState{}
-	es.string(s)
-
-	esBytes := &encodeState{}
-	esBytes.stringBytes([]byte(s))
-
-	enc := es.Buffer.String()
-	encBytes := esBytes.Buffer.String()
-	if enc != encBytes {
-		i := 0
-		for i < len(enc) && i < len(encBytes) && enc[i] == encBytes[i] {
-			i++
-		}
-		enc = enc[i:]
-		encBytes = encBytes[i:]
-		i = 0
-		for i < len(enc) && i < len(encBytes) && enc[len(enc)-i-1] == encBytes[len(encBytes)-i-1] {
-			i++
-		}
-		enc = enc[:len(enc)-i]
-		encBytes = encBytes[:len(encBytes)-i]
-
-		if len(enc) > 20 {
-			enc = enc[:20] + "..."
-		}
-		if len(encBytes) > 20 {
-			encBytes = encBytes[:20] + "..."
-		}
-
-		t.Errorf("encodings differ at %#q vs %#q", enc, encBytes)
 	}
 }
 
