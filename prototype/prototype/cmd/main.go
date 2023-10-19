@@ -11,13 +11,29 @@ func main() {
 		Name   string
 		Colors []string
 	}
-	group := ColorGroup{
-		ID:     1,
-		Name:   "Reds",
-		Colors: []string{"Crimson", "Red", "Ruby", "Maroon"},
+
+	type Toy struct {
+		Model      string
+		ColorGroup ColorGroup
+		Materials  map[string]string
 	}
-	_, err := prototype.Marshal(group)
+
+	toy := Toy{
+		Model: "bumblebee",
+		ColorGroup: ColorGroup{
+			ID:     1,
+			Name:   "Reds",
+			Colors: []string{"Crimson", "Red", "Ruby", "Maroon"},
+		},
+		Materials: map[string]string{
+			"head": "iron",
+			"body": "plastic",
+		},
+	}
+
+	_, err := prototype.Marshal(toy)
 	if err != nil {
 		fmt.Println("error:", err)
 	}
+
 }
