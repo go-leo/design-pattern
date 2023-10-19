@@ -5,7 +5,7 @@ import (
 	"github.com/go-leo/design-pattern/prototype/prototype"
 )
 
-func Sample() {
+func main() {
 	type ColorGroup struct {
 		ID     int
 		Name   string

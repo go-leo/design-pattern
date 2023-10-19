@@ -11,7 +11,6 @@
 package prototype
 
 import (
-	"bytes"
 	"encoding"
 	"fmt"
 	"github.com/go-leo/gox/convx"
@@ -163,9 +162,7 @@ func Marshal(v any) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	buf := append([]byte(nil), e.Bytes()...)
-
-	return buf, nil
+	return []byte{}, nil
 }
 
 // Marshaler is the interface implemented by types that
@@ -219,7 +216,6 @@ var hex = "0123456789abcdef"
 
 // An encodeState encodes JSON into a bytes.Buffer.
 type encodeState struct {
-	bytes.Buffer // accumulated output
 	// Keep track of what pointers we've seen in the current recursive call
 	// path, to avoid cycles that could lead to a stack overflow. Only do
 	// the relatively expensive map operations if ptrLevel is larger than
@@ -236,7 +232,6 @@ var encodeStatePool sync.Pool
 func newEncodeState() *encodeState {
 	if v := encodeStatePool.Get(); v != nil {
 		e := v.(*encodeState)
-		e.Reset()
 		if len(e.ptrSeen) > 0 {
 			panic("ptrEncoder.encode should have emptied ptrSeen via defers")
 		}
@@ -390,7 +385,6 @@ func invalidValueEncoder(e *encodeState, fks []string, v reflect.Value, opts enc
 }
 
 func writeNull(e *encodeState, fks []string, v reflect.Value, _ encOpts) {
-	e.WriteString("null")
 	printValue(fks, "null")
 }
 
@@ -412,8 +406,6 @@ func marshalerEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpt
 	if err != nil {
 		return &MarshalerError{v.Type(), err, "MarshalJSON"}
 	}
-	// copy JSON into buffer, checking validity.
-	e.Buffer.Write(b)
 	printValue(fks, string(b))
 	return nil
 }
@@ -429,8 +421,6 @@ func addrMarshalerEncoder(e *encodeState, fks []string, v reflect.Value, opts en
 	if err != nil {
 		return &MarshalerError{v.Type(), err, "MarshalJSON"}
 	}
-	// copy JSON into buffer, checking validity.
-	e.Buffer.Write(b)
 	printValue(fks, string(b))
 	return nil
 }
@@ -449,7 +439,6 @@ func textMarshalerEncoder(e *encodeState, fks []string, v reflect.Value, opts en
 	if err != nil {
 		return &MarshalerError{v.Type(), err, "MarshalText"}
 	}
-	e.stringBytes(b)
 	printValue(fks, string(b))
 	return nil
 }
@@ -465,50 +454,21 @@ func addrTextMarshalerEncoder(e *encodeState, fks []string, v reflect.Value, opt
 	if err != nil {
 		return &MarshalerError{v.Type(), err, "MarshalText"}
 	}
-	e.stringBytes(b)
 	printValue(fks, string(b))
 	return nil
 }
 
 func boolEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
-	if opts.quoted {
-		e.WriteByte('"')
-	}
-	if v.Bool() {
-		e.WriteString("true")
-	} else {
-		e.WriteString("false")
-	}
-	if opts.quoted {
-		e.WriteByte('"')
-	}
-
 	printValue(fks, v.Bool())
 	return nil
 }
 
 func intEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
-	if opts.quoted {
-		e.WriteByte('"')
-	}
-	e.WriteString(strconv.FormatInt(v.Int(), 10))
-	if opts.quoted {
-		e.WriteByte('"')
-	}
-
 	printValue(fks, v.Int())
 	return nil
 }
 
 func uintEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
-	if opts.quoted {
-		e.WriteByte('"')
-	}
-	e.WriteString(strconv.FormatUint(v.Uint(), 10))
-	if opts.quoted {
-		e.WriteByte('"')
-	}
-
 	printValue(fks, v.Uint())
 	return nil
 }
@@ -520,14 +480,6 @@ func (bits floatEncoder) encode(e *encodeState, fks []string, v reflect.Value, o
 	if math.IsInf(f, 0) || math.IsNaN(f) {
 		return &UnsupportedValueError{v, strconv.FormatFloat(f, 'g', -1, int(bits))}
 	}
-	if opts.quoted {
-		e.WriteByte('"')
-	}
-	e.WriteString(convx.ToString(f))
-	if opts.quoted {
-		e.WriteByte('"')
-	}
-
 	printValue(fks, v.Float())
 	return nil
 }
@@ -548,28 +500,13 @@ func stringEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) 
 		if !isValidNumber(numStr) {
 			return fmt.Errorf("json: invalid number literal %q", numStr)
 		}
-		if opts.quoted {
-			e.WriteByte('"')
-		}
-		e.WriteString(numStr)
-		if opts.quoted {
-			e.WriteByte('"')
-		}
-
 		printValue(fks, v.String())
 		return nil
 	}
 	if opts.quoted {
-		e2 := newEncodeState()
-		// Since we encode the string twice, we only need to escape HTML
-		// the first time.
-		e2.string(v.String())
-		e.stringBytes(e2.Bytes())
-		encodeStatePool.Put(e2)
 		printValue(fks, v.String())
 		return nil
 	}
-	e.string(v.String())
 	printValue(fks, v.String())
 	return nil
 }
@@ -657,7 +594,6 @@ type structFields struct {
 }
 
 func (se structEncoder) encode(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
-	next := byte('{')
 FieldLoop:
 	for i := range se.fields.list {
 		f := &se.fields.list[i]
@@ -677,18 +613,10 @@ FieldLoop:
 		if f.omitEmpty && isEmptyValue(fv) {
 			continue
 		}
-		e.WriteByte(next)
-		next = ','
-		e.WriteString(f.nameNonEsc)
 		opts.quoted = f.quoted
 		if err := f.encoder(e, append(fks, f.name), fv, opts); err != nil {
 			return err
 		}
-	}
-	if next == '{' {
-		e.WriteString("{}")
-	} else {
-		e.WriteByte('}')
 	}
 	return nil
 }
@@ -717,7 +645,6 @@ func (me mapEncoder) encode(e *encodeState, fks []string, v reflect.Value, opts 
 		e.ptrSeen[ptr] = struct{}{}
 		defer delete(e.ptrSeen, ptr)
 	}
-	e.WriteByte('{')
 
 	// Extract and sort the keys.
 	sv := make([]reflectWithString, v.Len())
@@ -731,17 +658,11 @@ func (me mapEncoder) encode(e *encodeState, fks []string, v reflect.Value, opts 
 	}
 	sort.Slice(sv, func(i, j int) bool { return sv[i].ks < sv[j].ks })
 
-	for i, kv := range sv {
-		if i > 0 {
-			e.WriteByte(',')
-		}
-		e.string(kv.ks)
-		e.WriteByte(':')
+	for _, kv := range sv {
 		if err := me.elemEnc(e, append(slices.Clone(fks), kv.ks), kv.v, opts); err != nil {
 			return err
 		}
 	}
-	e.WriteByte('}')
 	e.ptrLevel--
 	return nil
 }
@@ -765,12 +686,7 @@ func encodeByteSlice(e *encodeState, fks []string, v reflect.Value, opts encOpts
 		writeNull(e, fks, v, opts)
 		return nil
 	}
-	s := v.Bytes()
-	e.WriteByte('"')
-	e.Write(s)
-	e.WriteByte('"')
-
-	printValue(fks, string(s))
+	printValue(fks, string(v.Bytes()))
 	return nil
 }
 
@@ -823,17 +739,12 @@ type arrayEncoder struct {
 }
 
 func (ae arrayEncoder) encode(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
-	e.WriteByte('[')
 	n := v.Len()
 	for i := 0; i < n; i++ {
-		if i > 0 {
-			e.WriteByte(',')
-		}
 		if err := ae.elemEnc(e, append(slices.Clone(fks), convx.ToString(i)), v.Index(i), opts); err != nil {
 			return err
 		}
 	}
-	e.WriteByte(']')
 	return nil
 }
 
@@ -946,24 +857,6 @@ func (w *reflectWithString) resolve() error {
 		return nil
 	}
 	panic("unexpected map key type")
-}
-
-// NOTE: keep in sync with stringBytes below.
-func (e *encodeState) string(s string) {
-	e.WriteByte('"')
-	if len(s) > 0 {
-		e.WriteString(s)
-	}
-	e.WriteByte('"')
-}
-
-// NOTE: keep in sync with string above.
-func (e *encodeState) stringBytes(s []byte) {
-	e.WriteByte('"')
-	if len(s) > 0 {
-		e.Write(s)
-	}
-	e.WriteByte('"')
 }
 
 // NOTE: keep in sync with string above.
