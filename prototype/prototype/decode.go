@@ -1,10 +1,3 @@
-// Copyright 2010 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// Represents JSON data structure using native Go types: booleans, floats,
-// strings, arrays, and maps.
-
 package prototype
 
 import (
@@ -19,181 +12,30 @@ import (
 	"unicode/utf8"
 )
 
-// Unmarshal parses the JSON-encoded data and stores the result
-// in the value pointed to by v. If v is nil or not a pointer,
-// Unmarshal returns an InvalidUnmarshalError.
-//
-// Unmarshal uses the inverse of the encodings that
-// Marshal uses, allocating maps, slices, and pointers as necessary,
-// with the following additional rules:
-//
-// To unmarshal JSON into a pointer, Unmarshal first handles the case of
-// the JSON being the JSON literal null. In that case, Unmarshal sets
-// the pointer to nil. Otherwise, Unmarshal unmarshals the JSON into
-// the value pointed at by the pointer. If the pointer is nil, Unmarshal
-// allocates a new value for it to point to.
-//
-// To unmarshal JSON into a value implementing the Unmarshaler interface,
-// Unmarshal calls that value's UnmarshalJSON method, including
-// when the input is a JSON null.
-// Otherwise, if the value implements encoding.TextUnmarshaler
-// and the input is a JSON quoted string, Unmarshal calls that value's
-// UnmarshalText method with the unquoted form of the string.
-//
-// To unmarshal JSON into a struct, Unmarshal matches incoming object
-// keys to the keys used by Marshal (either the struct field name or its tag),
-// preferring an exact match but also accepting a case-insensitive match. By
-// default, object keys which don't have a corresponding struct field are
-// ignored (see Decoder.DisallowUnknownFields for an alternative).
-//
-// To unmarshal JSON into an interface value,
-// Unmarshal stores one of these in the interface value:
-//
-//	bool, for JSON booleans
-//	float64, for JSON numbers
-//	string, for JSON strings
-//	[]interface{}, for JSON arrays
-//	map[string]interface{}, for JSON objects
-//	nil for JSON null
-//
-// To unmarshal a JSON array into a slice, Unmarshal resets the slice length
-// to zero and then appends each element to the slice.
-// As a special case, to unmarshal an empty JSON array into a slice,
-// Unmarshal replaces the slice with a new empty slice.
-//
-// To unmarshal a JSON array into a Go array, Unmarshal decodes
-// JSON array elements into corresponding Go array elements.
-// If the Go array is smaller than the JSON array,
-// the additional JSON array elements are discarded.
-// If the JSON array is smaller than the Go array,
-// the additional Go array elements are set to zero values.
-//
-// To unmarshal a JSON object into a map, Unmarshal first establishes a map to
-// use. If the map is nil, Unmarshal allocates a new map. Otherwise Unmarshal
-// reuses the existing map, keeping existing entries. Unmarshal then stores
-// key-value pairs from the JSON object into the map. The map's key type must
-// either be any string type, an integer, implement json.Unmarshaler, or
-// implement encoding.TextUnmarshaler.
-//
-// If the JSON-encoded data contain a syntax error, Unmarshal returns a SyntaxError.
-//
-// If a JSON value is not appropriate for a given target type,
-// or if a JSON number overflows the target type, Unmarshal
-// skips that field and completes the unmarshaling as best it can.
-// If no more serious errors are encountered, Unmarshal returns
-// an UnmarshalTypeError describing the earliest such error. In any
-// case, it's not guaranteed that all the remaining fields following
-// the problematic one will be unmarshaled into the target object.
-//
-// The JSON null value unmarshals into an interface, map, pointer, or slice
-// by setting that Go value to nil. Because null is often used in JSON to mean
-// “not present,” unmarshaling a JSON null into any other Go type has no effect
-// on the value and produces no error.
-//
-// When unmarshaling quoted strings, invalid UTF-8 or
-// invalid UTF-16 surrogate pairs are not treated as an error.
-// Instead, they are replaced by the Unicode replacement
-// character U+FFFD.
-func Unmarshal(data []byte, v any) error {
+func Unmarshal(data []byte, tgt any) error {
 	// Check for well-formedness.
 	// Avoids filling out half a data structure
 	// before discovering a JSON syntax error.
 	var d decodeState
 	d.init(data)
-	return d.unmarshal(v)
+	return d.unmarshal(tgt)
 }
 
-// Unmarshaler is the interface implemented by types
-// that can unmarshal a JSON description of themselves.
-// The input can be assumed to be a valid encoding of
-// a JSON value. UnmarshalJSON must copy the JSON data
-// if it wishes to retain the data after returning.
-//
-// By convention, to approximate the behavior of Unmarshal itself,
-// Unmarshalers implement UnmarshalJSON([]byte("null")) as a no-op.
-type Unmarshaler interface {
-	UnmarshalJSON([]byte) error
-}
-
-// An UnmarshalTypeError describes a JSON value that was
-// not appropriate for a value of a specific Go type.
-type UnmarshalTypeError struct {
-	Value  string       // description of JSON value - "bool", "array", "number -5"
-	Type   reflect.Type // type of Go value it could not be assigned to
-	Offset int64        // error occurred after reading Offset bytes
-	Struct string       // name of the struct type containing the field
-	Field  string       // the full path from root node to the field
-}
-
-func (e *UnmarshalTypeError) Error() string {
-	if e.Struct != "" || e.Field != "" {
-		return "json: cannot unmarshal " + e.Value + " into Go struct field " + e.Struct + "." + e.Field + " of type " + e.Type.String()
-	}
-	return "json: cannot unmarshal " + e.Value + " into Go value of type " + e.Type.String()
-}
-
-// An UnmarshalFieldError describes a JSON object key that
-// led to an unexported (and therefore unwritable) struct field.
-//
-// Deprecated: No longer used; kept for compatibility.
-type UnmarshalFieldError struct {
-	Key   string
-	Type  reflect.Type
-	Field reflect.StructField
-}
-
-func (e *UnmarshalFieldError) Error() string {
-	return "json: cannot unmarshal object key " + strconv.Quote(e.Key) + " into unexported field " + e.Field.Name + " of type " + e.Type.String()
-}
-
-// An InvalidUnmarshalError describes an invalid argument passed to Unmarshal.
-// (The argument to Unmarshal must be a non-nil pointer.)
-type InvalidUnmarshalError struct {
-	Type reflect.Type
-}
-
-func (e *InvalidUnmarshalError) Error() string {
-	if e.Type == nil {
-		return "json: Unmarshal(nil)"
-	}
-
-	if e.Type.Kind() != reflect.Pointer {
-		return "json: Unmarshal(non-pointer " + e.Type.String() + ")"
-	}
-	return "json: Unmarshal(nil " + e.Type.String() + ")"
-}
-
-func (d *decodeState) unmarshal(v any) error {
-	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Pointer || rv.IsNil() {
-		return &InvalidUnmarshalError{reflect.TypeOf(v)}
+func (d *decodeState) unmarshal(tgt any) error {
+	tgtVal := reflect.ValueOf(tgt)
+	if tgtVal.Kind() != reflect.Pointer || tgtVal.IsNil() {
+		return &InvalidUnmarshalError{Type: reflect.TypeOf(tgt)}
 	}
 
 	d.scan.reset()
 	d.scanWhile(scanSkipSpace)
-	// We decode rv not rv.Elem because the Unmarshaler interface
+	// We decode tgtVal not tgtVal.Elem because the Unmarshaler interface
 	// test must be applied at the top level of the value.
-	err := d.value(rv)
+	err := d.value(tgtVal)
 	if err != nil {
 		return d.addErrorContext(err)
 	}
 	return d.savedError
-}
-
-// A Number represents a JSON number literal.
-type Number string
-
-// String returns the literal text of the number.
-func (n Number) String() string { return string(n) }
-
-// Float64 returns the number as a float64.
-func (n Number) Float64() (float64, error) {
-	return strconv.ParseFloat(string(n), 64)
-}
-
-// Int64 returns the number as an int64.
-func (n Number) Int64() (int64, error) {
-	return strconv.ParseInt(string(n), 10, 64)
 }
 
 // An errorContext provides context for type errors during decoding.
@@ -411,84 +253,6 @@ func (d *decodeState) valueQuoted() any {
 		}
 	}
 	return unquotedValue{}
-}
-
-// indirect walks down v allocating pointers as needed,
-// until it gets to a non-pointer.
-// If it encounters an Unmarshaler, indirect stops and returns that.
-// If decodingNull is true, indirect stops at the first settable pointer so it
-// can be set to nil.
-func indirect(v reflect.Value, decodingNull bool) (Unmarshaler, encoding.TextUnmarshaler, reflect.Value) {
-	// Issue #24153 indicates that it is generally not a guaranteed property
-	// that you may round-trip a reflect.Value by calling Value.Addr().Elem()
-	// and expect the value to still be settable for values derived from
-	// unexported embedded struct fields.
-	//
-	// The logic below effectively does this when it first addresses the value
-	// (to satisfy possible pointer methods) and continues to dereference
-	// subsequent pointers as necessary.
-	//
-	// After the first round-trip, we set v back to the original value to
-	// preserve the original RW flags contained in reflect.Value.
-	v0 := v
-	haveAddr := false
-
-	// If v is a named type and is addressable,
-	// start with its address, so that if the type has pointer methods,
-	// we find them.
-	if v.Kind() != reflect.Pointer && v.Type().Name() != "" && v.CanAddr() {
-		haveAddr = true
-		v = v.Addr()
-	}
-	for {
-		// Load value from interface, but only if the result will be
-		// usefully addressable.
-		if v.Kind() == reflect.Interface && !v.IsNil() {
-			e := v.Elem()
-			if e.Kind() == reflect.Pointer && !e.IsNil() && (!decodingNull || e.Elem().Kind() == reflect.Pointer) {
-				haveAddr = false
-				v = e
-				continue
-			}
-		}
-
-		if v.Kind() != reflect.Pointer {
-			break
-		}
-
-		if decodingNull && v.CanSet() {
-			break
-		}
-
-		// Prevent infinite loop if v is an interface pointing to its own address:
-		//     var v interface{}
-		//     v = &v
-		if v.Elem().Kind() == reflect.Interface && v.Elem().Elem() == v {
-			v = v.Elem()
-			break
-		}
-		if v.IsNil() {
-			v.Set(reflect.New(v.Type().Elem()))
-		}
-		if v.Type().NumMethod() > 0 && v.CanInterface() {
-			if u, ok := v.Interface().(Unmarshaler); ok {
-				return u, nil, reflect.Value{}
-			}
-			if !decodingNull {
-				if u, ok := v.Interface().(encoding.TextUnmarshaler); ok {
-					return nil, u, reflect.Value{}
-				}
-			}
-		}
-
-		if haveAddr {
-			v = v0 // restore original value after round-trip Value.Addr().Elem()
-			haveAddr = false
-		} else {
-			v = v.Elem()
-		}
-	}
-	return nil, nil, v
 }
 
 // array consumes an array from d.data[d.off-1:], decoding into v.
@@ -847,8 +611,6 @@ func (d *decodeState) convertNumber(s string) (any, error) {
 	return f, nil
 }
 
-var numberType = reflect.TypeOf(Number(""))
-
 // literalStore decodes a literal stored in item into v.
 //
 // fromQuoted indicates whether this literal came from unwrapping a
@@ -978,10 +740,7 @@ func (d *decodeState) literalStore(item []byte, v reflect.Value, fromQuoted bool
 		s := string(item)
 		switch v.Kind() {
 		default:
-			if v.Kind() == reflect.String && v.Type() == numberType {
-				// s must be a valid number, because it's
-				// already been tokenized.
-				v.SetString(s)
+			if setTypeNumber(d, v, s) {
 				break
 			}
 			if fromQuoted {
@@ -989,42 +748,91 @@ func (d *decodeState) literalStore(item []byte, v reflect.Value, fromQuoted bool
 			}
 			d.saveError(&UnmarshalTypeError{Value: "number", Type: v.Type(), Offset: int64(d.readIndex())})
 		case reflect.Interface:
-			n, err := d.convertNumber(s)
-			if err != nil {
+			if err := setInterfaceNumber(d, v, s); err != nil {
 				d.saveError(err)
 				break
 			}
-			if v.NumMethod() != 0 {
-				d.saveError(&UnmarshalTypeError{Value: "number", Type: v.Type(), Offset: int64(d.readIndex())})
-				break
-			}
-			v.Set(reflect.ValueOf(n))
 
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			n, err := strconv.ParseInt(s, 10, 64)
-			if err != nil || v.OverflowInt(n) {
+			if err != nil {
 				d.saveError(&UnmarshalTypeError{Value: "number " + s, Type: v.Type(), Offset: int64(d.readIndex())})
 				break
 			}
-			v.SetInt(n)
+			if err = setIntNumber(d, v, n, s); err != nil {
+				d.saveError(err)
+				break
+			}
 
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 			n, err := strconv.ParseUint(s, 10, 64)
-			if err != nil || v.OverflowUint(n) {
+			if err != nil {
 				d.saveError(&UnmarshalTypeError{Value: "number " + s, Type: v.Type(), Offset: int64(d.readIndex())})
 				break
 			}
-			v.SetUint(n)
+			if err = setUintNumber(d, v, n, s); err != nil {
+				d.saveError(err)
+				break
+			}
 
 		case reflect.Float32, reflect.Float64:
 			n, err := strconv.ParseFloat(s, v.Type().Bits())
-			if err != nil || v.OverflowFloat(n) {
+			if err != nil {
 				d.saveError(&UnmarshalTypeError{Value: "number " + s, Type: v.Type(), Offset: int64(d.readIndex())})
 				break
 			}
-			v.SetFloat(n)
+			if err = setFloatNumber(d, v, n, s); err != nil {
+				d.saveError(err)
+				break
+			}
 		}
 	}
+	return nil
+}
+
+func setTypeNumber(d *decodeState, v reflect.Value, s string) bool {
+	if v.Kind() == reflect.String && v.Type() == numberType {
+		// s must be a valid number, because it's
+		// already been tokenized.
+		v.SetString(s)
+		return true
+	}
+	return false
+}
+
+func setInterfaceNumber(d *decodeState, v reflect.Value, s string) error {
+	n, err := d.convertNumber(s)
+	if err != nil {
+		return err
+	}
+	if v.NumMethod() != 0 {
+		return &UnmarshalTypeError{Value: "number", Type: v.Type(), Offset: int64(d.readIndex())}
+	}
+	v.Set(reflect.ValueOf(n))
+	return nil
+}
+
+func setIntNumber(d *decodeState, v reflect.Value, n int64, s string) error {
+	if v.OverflowInt(n) {
+		return &UnmarshalTypeError{Value: "number " + s, Type: v.Type(), Offset: int64(d.readIndex())}
+	}
+	v.SetInt(n)
+	return nil
+}
+
+func setUintNumber(d *decodeState, v reflect.Value, n uint64, s string) error {
+	if v.OverflowUint(n) {
+		return &UnmarshalTypeError{Value: "number " + s, Type: v.Type(), Offset: int64(d.readIndex())}
+	}
+	v.SetUint(n)
+	return nil
+}
+
+func setFloatNumber(d *decodeState, v reflect.Value, n float64, s string) error {
+	if v.OverflowFloat(n) {
+		return &UnmarshalTypeError{Value: "number " + s, Type: v.Type(), Offset: int64(d.readIndex())}
+	}
+	v.SetFloat(n)
 	return nil
 }
 
@@ -1303,4 +1111,82 @@ func unquoteBytes(s []byte) (t []byte, ok bool) {
 		}
 	}
 	return b[0:w], true
+}
+
+// indirect walks down v allocating pointers as needed,
+// until it gets to a non-pointer.
+// If it encounters an Unmarshaler, indirect stops and returns that.
+// If decodingNull is true, indirect stops at the first settable pointer so it
+// can be set to nil.
+func indirect(v reflect.Value, decodingNull bool) (Unmarshaler, encoding.TextUnmarshaler, reflect.Value) {
+	// Issue #24153 indicates that it is generally not a guaranteed property
+	// that you may round-trip a reflect.Value by calling Value.Addr().Elem()
+	// and expect the value to still be settable for values derived from
+	// unexported embedded struct fields.
+	//
+	// The logic below effectively does this when it first addresses the value
+	// (to satisfy possible pointer methods) and continues to dereference
+	// subsequent pointers as necessary.
+	//
+	// After the first round-trip, we set v back to the original value to
+	// preserve the original RW flags contained in reflect.Value.
+	v0 := v
+	haveAddr := false
+
+	// If v is a named type and is addressable,
+	// start with its address, so that if the type has pointer methods,
+	// we find them.
+	if v.Kind() != reflect.Pointer && v.Type().Name() != "" && v.CanAddr() {
+		haveAddr = true
+		v = v.Addr()
+	}
+	for {
+		// Load value from interface, but only if the result will be
+		// usefully addressable.
+		if v.Kind() == reflect.Interface && !v.IsNil() {
+			e := v.Elem()
+			if e.Kind() == reflect.Pointer && !e.IsNil() && (!decodingNull || e.Elem().Kind() == reflect.Pointer) {
+				haveAddr = false
+				v = e
+				continue
+			}
+		}
+
+		if v.Kind() != reflect.Pointer {
+			break
+		}
+
+		if decodingNull && v.CanSet() {
+			break
+		}
+
+		// Prevent infinite loop if v is an interface pointing to its own address:
+		//     var v interface{}
+		//     v = &v
+		if v.Elem().Kind() == reflect.Interface && v.Elem().Elem() == v {
+			v = v.Elem()
+			break
+		}
+		if v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+		if v.Type().NumMethod() > 0 && v.CanInterface() {
+			if u, ok := v.Interface().(Unmarshaler); ok {
+				return u, nil, reflect.Value{}
+			}
+			if !decodingNull {
+				if u, ok := v.Interface().(encoding.TextUnmarshaler); ok {
+					return nil, u, reflect.Value{}
+				}
+			}
+		}
+
+		if haveAddr {
+			v = v0 // restore original value after round-trip Value.Addr().Elem()
+			haveAddr = false
+		} else {
+			v = v.Elem()
+		}
+	}
+	return nil, nil, v
 }

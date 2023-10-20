@@ -31,7 +31,7 @@ func main() {
 		},
 	}
 
-	_, err := prototype.Marshal(toy)
+	err := prototype.Marshal(nil, toy)
 	if err != nil {
 		fmt.Println("error:", err)
 	}
@@ -65,7 +65,7 @@ func Unsupported() {
 		},
 	}
 
-	_, err := prototype.Marshal(toy)
+	err := prototype.Marshal(nil, toy)
 	if err != nil {
 		fmt.Println("error:", err)
 	}

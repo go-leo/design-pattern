@@ -13,98 +13,86 @@ import (
 	"strings"
 )
 
-func invalidValueEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
-	writeNull(e, fks, v, opts)
+func printValue(e *encodeState, fks []string, val any, opts encOpts) error {
+	fmt.Println(strings.Join(fks, "."), "=", val)
 	return nil
 }
 
-func writeNull(e *encodeState, fks []string, v reflect.Value, _ encOpts) {
-	printValue(fks, "null")
+func invalidValueEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
+	return writeNull(e, fks, v, opts)
 }
 
-func printValue(fks []string, val any) {
-	fmt.Println(strings.Join(fks, "."), "=", val)
+func writeNull(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
+	return printValue(e, fks, "null", opts)
 }
 
 func marshalerEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
 	if v.Kind() == reflect.Pointer && v.IsNil() {
-		writeNull(e, fks, v, opts)
-		return nil
+		return writeNull(e, fks, v, opts)
 	}
 	m, ok := v.Interface().(Marshaler)
 	if !ok {
-		writeNull(e, fks, v, opts)
-		return nil
+		return writeNull(e, fks, v, opts)
 	}
 	b, err := m.MarshalJSON()
 	if err != nil {
 		return &MarshalerError{v.Type(), err, "MarshalJSON"}
 	}
-	printValue(fks, string(b))
-	return nil
+	return printValue(e, fks, string(b), opts)
 }
 
 func addrMarshalerEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
 	va := v.Addr()
 	if va.IsNil() {
-		writeNull(e, fks, v, opts)
-		return nil
+		return writeNull(e, fks, v, opts)
 	}
 	m := va.Interface().(Marshaler)
 	b, err := m.MarshalJSON()
 	if err != nil {
 		return &MarshalerError{v.Type(), err, "MarshalJSON"}
 	}
-	printValue(fks, string(b))
-	return nil
+	return printValue(e, fks, string(b), opts)
+
 }
 
 func textMarshalerEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
 	if v.Kind() == reflect.Pointer && v.IsNil() {
-		writeNull(e, fks, v, opts)
-		return nil
+		return writeNull(e, fks, v, opts)
 	}
 	m, ok := v.Interface().(encoding.TextMarshaler)
 	if !ok {
-		writeNull(e, fks, v, opts)
-		return nil
+		return writeNull(e, fks, v, opts)
 	}
 	b, err := m.MarshalText()
 	if err != nil {
 		return &MarshalerError{v.Type(), err, "MarshalText"}
 	}
-	printValue(fks, string(b))
-	return nil
+	return printValue(e, fks, string(b), opts)
 }
 
 func addrTextMarshalerEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
 	va := v.Addr()
 	if va.IsNil() {
-		writeNull(e, fks, v, opts)
-		return nil
+		return writeNull(e, fks, v, opts)
 	}
 	m := va.Interface().(encoding.TextMarshaler)
 	b, err := m.MarshalText()
 	if err != nil {
 		return &MarshalerError{v.Type(), err, "MarshalText"}
 	}
-	printValue(fks, string(b))
-	return nil
+	return printValue(e, fks, string(b), opts)
 }
 
 func boolEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
-	printValue(fks, v.Bool())
-	return nil
+	return printValue(e, fks, v.Bool(), opts)
 }
 
 func intEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
-	printValue(fks, v.Int())
-	return nil
+	return printValue(e, fks, v.Int(), opts)
 }
 
 func uintEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
-	printValue(fks, v.Uint())
-	return nil
+	return printValue(e, fks, v.Uint(), opts)
 }
 
 type floatEncoder int // number of bits
@@ -114,8 +102,7 @@ func (bits floatEncoder) encode(e *encodeState, fks []string, v reflect.Value, o
 	if math.IsInf(f, 0) || math.IsNaN(f) {
 		return &UnsupportedValueError{v, strconv.FormatFloat(f, 'g', -1, int(bits))}
 	}
-	printValue(fks, v.Float())
-	return nil
+	return printValue(e, fks, v.Float(), opts)
 }
 
 var (
@@ -134,15 +121,9 @@ func stringEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) 
 		if !isValidNumber(numStr) {
 			return fmt.Errorf("json: invalid number literal %q", numStr)
 		}
-		printValue(fks, v.String())
-		return nil
+		return printValue(e, fks, v.String(), opts)
 	}
-	if opts.quoted {
-		printValue(fks, v.String())
-		return nil
-	}
-	printValue(fks, v.String())
-	return nil
+	return printValue(e, fks, v.String(), opts)
 }
 
 // isValidNumber reports whether s is a valid JSON number literal.
@@ -207,8 +188,7 @@ func isValidNumber(s string) bool {
 
 func interfaceEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
 	if v.IsNil() {
-		writeNull(e, fks, v, opts)
-		return nil
+		return writeNull(e, fks, v, opts)
 	}
 	value := v.Elem()
 	return valueEncoder(value)(e, fks, value, opts)
@@ -243,7 +223,6 @@ FieldLoop:
 		if f.omitEmpty && reflectx.IsEmptyValue(fv) {
 			continue
 		}
-		opts.quoted = f.quoted
 		if err := f.encoder(e, append(fks, f.name), fv, opts); err != nil {
 			return err
 		}
@@ -262,8 +241,7 @@ type mapEncoder struct {
 
 func (me mapEncoder) encode(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
 	if v.IsNil() {
-		writeNull(e, fks, v, opts)
-		return nil
+		return writeNull(e, fks, v, opts)
 	}
 	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
 		// We're a large number of nested ptrEncoder.encode calls deep;
@@ -313,11 +291,9 @@ func newMapEncoder(t reflect.Type) encoderFunc {
 
 func encodeByteSlice(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
 	if v.IsNil() {
-		writeNull(e, fks, v, opts)
-		return nil
+		return writeNull(e, fks, v, opts)
 	}
-	printValue(fks, string(v.Bytes()))
-	return nil
+	return printValue(e, fks, string(v.Bytes()), opts)
 }
 
 // sliceEncoder just wraps an arrayEncoder, checking to make sure the value isn't nil.
@@ -327,8 +303,7 @@ type sliceEncoder struct {
 
 func (se sliceEncoder) encode(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
 	if v.IsNil() {
-		writeNull(e, fks, v, opts)
-		return nil
+		return writeNull(e, fks, v, opts)
 	}
 	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
 		// We're a large number of nested ptrEncoder.encode calls deep;
@@ -389,8 +364,7 @@ type ptrEncoder struct {
 
 func (pe ptrEncoder) encode(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
 	if v.IsNil() {
-		writeNull(e, fks, v, opts)
-		return nil
+		return writeNull(e, fks, v, opts)
 	}
 	if e.ptrLevel++; e.ptrLevel > startDetectingCyclesAfter {
 		// We're a large number of nested ptrEncoder.encode calls deep;
@@ -432,6 +406,6 @@ func newCondAddrEncoder(canAddrEnc, elseEnc encoderFunc) encoderFunc {
 	return enc.encode
 }
 
-func unsupportedTypeEncoder(e *encodeState, fks []string, v reflect.Value, _ encOpts) error {
+func unsupportedTypeEncoder(e *encodeState, fks []string, v reflect.Value, opts encOpts) error {
 	return &UnsupportedTypeError{v.Type()}
 }

@@ -1,13 +1,13 @@
 package prototype
 
 type options struct {
-	Copy          func(to any, from any) error
+	Copy          func(tgt any, src any) error
 	BoolConverter BoolConverter
 }
 
 type Option func(o *options)
 
-func Copy(f func(to any, from any) error) Option {
+func Copy(f func(tgt any, src any) error) Option {
 	return func(o *options) {
 		o.Copy = f
 	}
@@ -25,5 +25,5 @@ func Clone(tgt any, src any, opts ...Option) error {
 }
 
 func clone(tgt any, src any, opt *options) (err error) {
-	return cloneAny(tgt, src, opt)
+	return nil
 }
