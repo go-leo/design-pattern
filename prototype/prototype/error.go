@@ -2,7 +2,7 @@ package prototype
 
 import "reflect"
 
-// An UnsupportedTypeError is returned by Marshal when attempting
+// An UnsupportedTypeError is returned by Clone when attempting
 // to encode an unsupported value type.
 type UnsupportedTypeError struct {
 	Type reflect.Type
@@ -12,7 +12,7 @@ func (e *UnsupportedTypeError) Error() string {
 	return "json: unsupported type: " + e.Type.String()
 }
 
-// An UnsupportedValueError is returned by Marshal when attempting
+// An UnsupportedValueError is returned by Clone when attempting
 // to encode an unsupported value.
 type UnsupportedValueError struct {
 	Value reflect.Value
@@ -60,19 +60,19 @@ func (e *UnmarshalTypeError) Error() string {
 	return "json: cannot unmarshal " + e.Value + " into Go value of type " + e.Type.String()
 }
 
-// An InvalidUnmarshalError describes an invalid argument passed to Unmarshal.
-// (The argument to Unmarshal must be a non-nil pointer.)
-type InvalidUnmarshalError struct {
+// An InvalidCloneError describes an invalid argument passed to Clone.
+// (The target argument to Clone must be a non-nil pointer.)
+type InvalidCloneError struct {
 	Type reflect.Type
 }
 
-func (e *InvalidUnmarshalError) Error() string {
+func (e *InvalidCloneError) Error() string {
 	if e.Type == nil {
-		return "json: Unmarshal(nil)"
+		return "prototype: Clone(nil, src)"
 	}
 
 	if e.Type.Kind() != reflect.Pointer {
-		return "json: Unmarshal(non-pointer " + e.Type.String() + ")"
+		return "json: Clone(non-pointer " + e.Type.String() + ", src)"
 	}
-	return "json: Unmarshal(nil " + e.Type.String() + ")"
+	return "prototype: Clone(nil " + e.Type.String() + ", src)"
 }

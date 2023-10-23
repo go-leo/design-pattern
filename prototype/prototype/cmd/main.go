@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/go-leo/design-pattern/prototype/prototype"
 )
 
+// func mainSample() {
 func main() {
 	type ColorGroup struct {
 		ID     int
@@ -31,7 +33,8 @@ func main() {
 		},
 	}
 
-	err := prototype.Marshal(nil, toy)
+	var clonedToy Toy
+	err := prototype.Clone(&clonedToy, toy)
 	if err != nil {
 		fmt.Println("error:", err)
 	}
@@ -65,8 +68,17 @@ func Unsupported() {
 		},
 	}
 
-	err := prototype.Marshal(nil, toy)
+	err := prototype.Clone(nil, toy)
 	if err != nil {
 		fmt.Println("error:", err)
 	}
+}
+
+func JsonUnmarshal() {
+	var b bool
+	err := json.Unmarshal([]byte("true"), &b)
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+	fmt.Println(b)
 }

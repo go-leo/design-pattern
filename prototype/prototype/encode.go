@@ -10,17 +10,20 @@ import (
 	"unicode"
 )
 
-func Marshal(tgt any, src any) error {
-	e := newEncodeState()
-	defer encodeStatePool.Put(e)
-	err := marshal(e, src, encOpts{})
-	if err != nil {
-		return err
+func Clone(tgt any, src any) error {
+	tgtVal := reflect.ValueOf(tgt)
+	if tgtVal.Kind() != reflect.Pointer || tgtVal.IsNil() {
+		return &InvalidCloneError{Type: reflect.TypeOf(tgt)}
 	}
-	return nil
+	srcVal := reflect.ValueOf(src)
+
+	e := newCloneState()
+	defer cloneStatePool.Put(e)
+
+	return clone(e, tgtVal, srcVal, encOpts{})
 }
 
-type encodeState struct {
+type cloneState struct {
 	// Keep track of what pointers we've seen in the current recursive call
 	// path, to avoid cycles that could lead to a stack overflow. Only do
 	// the relatively expensive map operations if ptrLevel is larger than
@@ -30,30 +33,27 @@ type encodeState struct {
 	ptrSeen  map[any]struct{}
 }
 
-var encodeStatePool sync.Pool
+var cloneStatePool sync.Pool
 
-func newEncodeState() *encodeState {
-	if v := encodeStatePool.Get(); v != nil {
-		e := v.(*encodeState)
+func newCloneState() *cloneState {
+	if v := cloneStatePool.Get(); v != nil {
+		e := v.(*cloneState)
 		if len(e.ptrSeen) > 0 {
 			panic("ptrEncoder.encode should have emptied ptrSeen via defers")
 		}
 		e.ptrLevel = 0
 		return e
 	}
-	return &encodeState{ptrSeen: make(map[any]struct{})}
+	return &cloneState{ptrSeen: make(map[any]struct{})}
 }
 
-func marshal(e *encodeState, src any, opts encOpts) error {
-	value := reflect.ValueOf(src)
-	return valueEncoder(value)(e, []string{}, value, opts)
+func clone(e *cloneState, tgtVal, srcVal reflect.Value, opts encOpts) error {
+	return valueEncoder(srcVal)(e, []string{}, srcVal, opts)
 }
 
 const startDetectingCyclesAfter = 1000
 
 type encOpts struct{}
-
-type encoderFunc func(e *encodeState, fks []string, v reflect.Value, opts encOpts) error
 
 var encoderCache sync.Map // map[reflect.Type]encoderFunc
 
@@ -78,7 +78,7 @@ func typeEncoder(srcType reflect.Type) encoderFunc {
 		f  encoderFunc
 	)
 	wg.Add(1)
-	fi, loaded := encoderCache.LoadOrStore(srcType, encoderFunc(func(e *encodeState, fks []string, srcVal reflect.Value, opts encOpts) error {
+	fi, loaded := encoderCache.LoadOrStore(srcType, encoderFunc(func(e *cloneState, fks []string, srcVal reflect.Value, opts encOpts) error {
 		wg.Wait()
 		return f(e, fks, srcVal, opts)
 	}))
@@ -205,6 +205,6 @@ func (w *reflectWithString) resolve() error {
 	panic("unexpected map key type")
 }
 
-func (e *encodeState) print(fks []string, val any) {
+func (e *cloneState) print(fks []string, val any) {
 	fmt.Println(strings.Join(fks, "."), val)
 }

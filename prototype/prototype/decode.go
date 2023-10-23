@@ -24,7 +24,7 @@ func Unmarshal(data []byte, tgt any) error {
 func (d *decodeState) unmarshal(tgt any) error {
 	tgtVal := reflect.ValueOf(tgt)
 	if tgtVal.Kind() != reflect.Pointer || tgtVal.IsNil() {
-		return &InvalidUnmarshalError{Type: reflect.TypeOf(tgt)}
+		return &InvalidCloneError{Type: reflect.TypeOf(tgt)}
 	}
 
 	d.scan.reset()
@@ -198,7 +198,7 @@ func (d *decodeState) value(v reflect.Value) error {
 
 	case scanBeginArray:
 		if v.IsValid() {
-			if err := d.array(v); err != nil {
+			if err := array(d, v); err != nil {
 				return err
 			}
 		} else {
@@ -208,7 +208,7 @@ func (d *decodeState) value(v reflect.Value) error {
 
 	case scanBeginObject:
 		if v.IsValid() {
-			if err := d.object(v); err != nil {
+			if err := object(d, v); err != nil {
 				return err
 			}
 		} else {
@@ -257,7 +257,7 @@ func (d *decodeState) valueQuoted() any {
 
 // array consumes an array from d.data[d.off-1:], decoding into v.
 // The first byte of the array ('[') has been read already.
-func (d *decodeState) array(v reflect.Value) error {
+func array(d *decodeState, v reflect.Value) error {
 	// Check for unmarshaler.
 	u, ut, pv := indirect(v, false)
 	if u != nil {
@@ -363,7 +363,7 @@ var textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem(
 
 // object consumes an object from d.data[d.off-1:], decoding into v.
 // The first byte ('{') of the object has been read already.
-func (d *decodeState) object(v reflect.Value) error {
+func object(d *decodeState, v reflect.Value) error {
 	// Check for unmarshaler.
 	u, ut, pv := indirect(v, false)
 	if u != nil {
