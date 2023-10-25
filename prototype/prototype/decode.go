@@ -3,6 +3,7 @@ package prototype
 import (
 	"encoding"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -565,7 +566,7 @@ func object(d *decodeState, v reflect.Value) error {
 // depending on the setting of d.useNumber.
 func convertNumber(d *decodeState, s string) (any, error) {
 	if d.useNumber {
-		return Number(s), nil
+		return json.Number(s), nil
 	}
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
