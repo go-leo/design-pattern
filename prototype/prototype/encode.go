@@ -93,11 +93,6 @@ func typeEncoder(srcType reflect.Type) encoderFunc {
 	return f
 }
 
-var (
-	marshalerType     = reflect.TypeOf((*Marshaler)(nil)).Elem()
-	textMarshalerType = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
-)
-
 // newTypeEncoder constructs an encoderFunc for a type.
 // The returned encoder only checks CanAddr when allowAddr is true.
 func newTypeEncoder(srcType reflect.Type, allowAddr bool) encoderFunc {
@@ -105,12 +100,6 @@ func newTypeEncoder(srcType reflect.Type, allowAddr bool) encoderFunc {
 	// Marshaler with a value receiver, then we're better off taking
 	// the address of the value - otherwise we end up with an
 	// allocation as we cast the value to an interface.
-	if srcType.Kind() != reflect.Pointer && allowAddr && reflect.PointerTo(srcType).Implements(marshalerType) {
-		return newCondAddrEncoder(addrMarshalerEncoder, newTypeEncoder(srcType, false))
-	}
-	if srcType.Implements(marshalerType) {
-		return marshalerEncoder
-	}
 	if srcType.Kind() != reflect.Pointer && allowAddr && reflect.PointerTo(srcType).Implements(textMarshalerType) {
 		return newCondAddrEncoder(addrTextMarshalerEncoder, newTypeEncoder(srcType, false))
 	}

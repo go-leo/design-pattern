@@ -28,35 +28,6 @@ func writeNull(e *cloneState, fks []string, v reflect.Value, opts encOpts) error
 	return printValue(e, fks, "null", opts)
 }
 
-func marshalerEncoder(e *cloneState, fks []string, v reflect.Value, opts encOpts) error {
-	if v.Kind() == reflect.Pointer && v.IsNil() {
-		return writeNull(e, fks, v, opts)
-	}
-	m, ok := v.Interface().(Marshaler)
-	if !ok {
-		return writeNull(e, fks, v, opts)
-	}
-	b, err := m.MarshalJSON()
-	if err != nil {
-		return &MarshalerError{v.Type(), err, "MarshalJSON"}
-	}
-	return printValue(e, fks, string(b), opts)
-}
-
-func addrMarshalerEncoder(e *cloneState, fks []string, v reflect.Value, opts encOpts) error {
-	va := v.Addr()
-	if va.IsNil() {
-		return writeNull(e, fks, v, opts)
-	}
-	m := va.Interface().(Marshaler)
-	b, err := m.MarshalJSON()
-	if err != nil {
-		return &MarshalerError{v.Type(), err, "MarshalJSON"}
-	}
-	return printValue(e, fks, string(b), opts)
-
-}
-
 func textMarshalerEncoder(e *cloneState, fks []string, v reflect.Value, opts encOpts) error {
 	if v.Kind() == reflect.Pointer && v.IsNil() {
 		return writeNull(e, fks, v, opts)
@@ -333,7 +304,7 @@ func newSliceEncoder(t reflect.Type) encoderFunc {
 	// Byte slices get special treatment; arrays don't.
 	if t.Elem().Kind() == reflect.Uint8 {
 		p := reflect.PointerTo(t.Elem())
-		if !p.Implements(marshalerType) && !p.Implements(textMarshalerType) {
+		if !p.Implements(textMarshalerType) {
 			return encodeByteSlice
 		}
 	}
@@ -411,3 +382,33 @@ func newCondAddrEncoder(canAddrEnc, elseEnc encoderFunc) encoderFunc {
 func unsupportedTypeEncoder(e *cloneState, fks []string, v reflect.Value, opts encOpts) error {
 	return &UnsupportedTypeError{v.Type()}
 }
+
+//
+//func marshalerEncoder(e *cloneState, fks []string, v reflect.Value, opts encOpts) error {
+//	if v.Kind() == reflect.Pointer && v.IsNil() {
+//		return writeNull(e, fks, v, opts)
+//	}
+//	m, ok := v.Interface().(Marshaler)
+//	if !ok {
+//		return writeNull(e, fks, v, opts)
+//	}
+//	b, err := m.MarshalJSON()
+//	if err != nil {
+//		return &MarshalerError{v.Type(), err, "MarshalJSON"}
+//	}
+//	return printValue(e, fks, string(b), opts)
+//}
+//
+//func addrMarshalerEncoder(e *cloneState, fks []string, v reflect.Value, opts encOpts) error {
+//	va := v.Addr()
+//	if va.IsNil() {
+//		return writeNull(e, fks, v, opts)
+//	}
+//	m := va.Interface().(Marshaler)
+//	b, err := m.MarshalJSON()
+//	if err != nil {
+//		return &MarshalerError{v.Type(), err, "MarshalJSON"}
+//	}
+//	return printValue(e, fks, string(b), opts)
+//
+//}

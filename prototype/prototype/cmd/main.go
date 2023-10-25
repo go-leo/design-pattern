@@ -6,8 +6,26 @@ import (
 	"github.com/go-leo/design-pattern/prototype/prototype"
 )
 
-// func mainSample() {
 func main() {
+	arr := []string{"1", "2", "3"}
+	var arr2 []string
+	err := prototype.Clone(&arr2, arr)
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+}
+
+func number() {
+	var num = 20
+	var num2 int
+	err := prototype.Clone(&num2, num)
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+}
+
+// func mainSample() {
+func mainSample() {
 	type ColorGroup struct {
 		ID     int
 		Name   string

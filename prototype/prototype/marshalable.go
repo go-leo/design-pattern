@@ -1,10 +1,20 @@
 package prototype
 
+import (
+	"encoding"
+	"reflect"
+)
+
+var (
+	textMarshalerType   = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
+	textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
+)
+
 // Marshaler is the interface implemented by types that
 // can clone themselves into valid JSON.
-type Marshaler interface {
-	MarshalJSON() ([]byte, error)
-}
+//type Marshaler interface {
+//	MarshalJSON() ([]byte, error)
+//}
 
 // Unmarshaler is the interface implemented by types
 // that can unmarshal a JSON description of themselves.

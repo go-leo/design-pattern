@@ -6,16 +6,12 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
 )
 
 func Unmarshal(data []byte, tgt any) error {
-	// Check for well-formedness.
-	// Avoids filling out half a data structure
-	// before discovering a JSON syntax error.
 	var d decodeState
 	d.init(data)
 	return d.unmarshal(tgt)
@@ -31,17 +27,7 @@ func (d *decodeState) unmarshal(tgt any) error {
 	d.scanWhile(scanSkipSpace)
 	// We decode tgtVal not tgtVal.Elem because the Unmarshaler interface
 	// test must be applied at the top level of the value.
-	err := d.value(tgtVal)
-	if err != nil {
-		return d.addErrorContext(err)
-	}
-	return d.savedError
-}
-
-// An errorContext provides context for type errors during decoding.
-type errorContext struct {
-	Struct     reflect.Type
-	FieldStack []string
+	return d.value(tgtVal)
 }
 
 // decodeState represents the state while decoding a JSON value.
@@ -50,8 +36,6 @@ type decodeState struct {
 	off                   int // next read offset in data
 	opcode                int // last read result
 	scan                  scanner
-	errorContext          *errorContext
-	savedError            error
 	useNumber             bool
 	disallowUnknownFields bool
 }
@@ -69,33 +53,11 @@ const phasePanicMsg = "JSON decoder out of sync - data changing underfoot?"
 func (d *decodeState) init(data []byte) *decodeState {
 	d.data = data
 	d.off = 0
-	d.savedError = nil
-	if d.errorContext != nil {
-		d.errorContext.Struct = nil
-		// Reuse the allocated space for the FieldStack slice.
-		d.errorContext.FieldStack = d.errorContext.FieldStack[:0]
-	}
 	return d
 }
 
-// saveError saves the first err it is called with,
 // for reporting at the end of the unmarshal.
 func (d *decodeState) saveError(err error) {
-	if d.savedError == nil {
-		d.savedError = d.addErrorContext(err)
-	}
-}
-
-// addErrorContext returns a new error enhanced with information from d.errorContext
-func (d *decodeState) addErrorContext(err error) error {
-	if d.errorContext != nil && (d.errorContext.Struct != nil || len(d.errorContext.FieldStack) > 0) {
-		switch err := err.(type) {
-		case *UnmarshalTypeError:
-			err.Struct = d.errorContext.Struct.Name()
-			err.Field = strings.Join(d.errorContext.FieldStack, ".")
-		}
-	}
-	return err
 }
 
 // skip scans to the end of what was started.
@@ -222,7 +184,7 @@ func (d *decodeState) value(v reflect.Value) error {
 		d.rescanLiteral()
 
 		if v.IsValid() {
-			if err := d.literalStore(d.data[start:d.readIndex()], v, false); err != nil {
+			if err := literalStore(d, d.data[start:d.readIndex()], v, false); err != nil {
 				return err
 			}
 		}
@@ -246,7 +208,7 @@ func (d *decodeState) valueQuoted() any {
 		d.scanNext()
 
 	case scanBeginLiteral:
-		v := d.literalInterface()
+		v := literalInterface(d)
 		switch v.(type) {
 		case nil, string:
 			return v
@@ -258,6 +220,9 @@ func (d *decodeState) valueQuoted() any {
 // array consumes an array from d.data[d.off-1:], decoding into v.
 // The first byte of the array ('[') has been read already.
 func array(d *decodeState, v reflect.Value) error {
+	if v.IsValid() {
+		return &InvalidCloneError{Type: v.Type()}
+	}
 	// Check for unmarshaler.
 	u, ut, pv := indirect(v, false)
 	if u != nil {
@@ -277,7 +242,7 @@ func array(d *decodeState, v reflect.Value) error {
 	case reflect.Interface:
 		if v.NumMethod() == 0 {
 			// Decoding into nil interface? Switch to non-reflect code.
-			ai := d.arrayInterface()
+			ai := arrayInterface(d)
 			v.Set(reflect.ValueOf(ai))
 			return nil
 		}
@@ -359,11 +324,13 @@ func array(d *decodeState, v reflect.Value) error {
 }
 
 var nullLiteral = []byte("null")
-var textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
 
 // object consumes an object from d.data[d.off-1:], decoding into v.
 // The first byte ('{') of the object has been read already.
 func object(d *decodeState, v reflect.Value) error {
+	if v.IsValid() {
+		return &InvalidCloneError{Type: v.Type()}
+	}
 	// Check for unmarshaler.
 	u, ut, pv := indirect(v, false)
 	if u != nil {
@@ -381,7 +348,7 @@ func object(d *decodeState, v reflect.Value) error {
 
 	// Decoding into nil interface? Switch to non-reflect code.
 	if v.Kind() == reflect.Interface && v.NumMethod() == 0 {
-		oi := d.objectInterface()
+		oi := objectInterface(d)
 		v.Set(reflect.ValueOf(oi))
 		return nil
 	}
@@ -420,10 +387,6 @@ func object(d *decodeState, v reflect.Value) error {
 	}
 
 	var mapElem reflect.Value
-	var origErrorContext errorContext
-	if d.errorContext != nil {
-		origErrorContext = *d.errorContext
-	}
 
 	for {
 		// Read opening " of string key or closing }.
@@ -498,11 +461,11 @@ func object(d *decodeState, v reflect.Value) error {
 					}
 					subv = subv.Field(i)
 				}
-				if d.errorContext == nil {
-					d.errorContext = new(errorContext)
-				}
-				d.errorContext.FieldStack = append(d.errorContext.FieldStack, f.name)
-				d.errorContext.Struct = t
+				//if d.errorContext == nil {
+				//	d.errorContext = new(errorContext)
+				//}
+				//d.errorContext.FieldStack = append(d.errorContext.FieldStack, f.name)
+				//d.errorContext.Struct = t
 			} else if d.disallowUnknownFields {
 				d.saveError(fmt.Errorf("json: unknown field %q", key))
 			}
@@ -520,11 +483,11 @@ func object(d *decodeState, v reflect.Value) error {
 		if destring {
 			switch qv := d.valueQuoted().(type) {
 			case nil:
-				if err := d.literalStore(nullLiteral, subv, false); err != nil {
+				if err := literalStore(d, nullLiteral, subv, false); err != nil {
 					return err
 				}
 			case string:
-				if err := d.literalStore([]byte(qv), subv, true); err != nil {
+				if err := literalStore(d, []byte(qv), subv, true); err != nil {
 					return err
 				}
 			default:
@@ -544,7 +507,7 @@ func object(d *decodeState, v reflect.Value) error {
 			switch {
 			case reflect.PointerTo(kt).Implements(textUnmarshalerType):
 				kv = reflect.New(kt)
-				if err := d.literalStore(item, kv, true); err != nil {
+				if err := literalStore(d, item, kv, true); err != nil {
 					return err
 				}
 				kv = kv.Elem()
@@ -581,13 +544,13 @@ func object(d *decodeState, v reflect.Value) error {
 		if d.opcode == scanSkipSpace {
 			d.scanWhile(scanSkipSpace)
 		}
-		if d.errorContext != nil {
-			// Reset errorContext to its original state.
-			// Keep the same underlying array for FieldStack, to reuse the
-			// space and avoid unnecessary allocs.
-			d.errorContext.FieldStack = d.errorContext.FieldStack[:len(origErrorContext.FieldStack)]
-			d.errorContext.Struct = origErrorContext.Struct
-		}
+		//if d.errorContext != nil {
+		//	// Reset errorContext to its original state.
+		//	// Keep the same underlying array for FieldStack, to reuse the
+		//	// space and avoid unnecessary allocs.
+		//	d.errorContext.FieldStack = d.errorContext.FieldStack[:len(origErrorContext.FieldStack)]
+		//	d.errorContext.Struct = origErrorContext.Struct
+		//}
 		if d.opcode == scanEndObject {
 			break
 		}
@@ -600,7 +563,7 @@ func object(d *decodeState, v reflect.Value) error {
 
 // convertNumber converts the number literal s to a float64 or a Number
 // depending on the setting of d.useNumber.
-func (d *decodeState) convertNumber(s string) (any, error) {
+func convertNumber(d *decodeState, s string) (any, error) {
 	if d.useNumber {
 		return Number(s), nil
 	}
@@ -616,7 +579,10 @@ func (d *decodeState) convertNumber(s string) (any, error) {
 // fromQuoted indicates whether this literal came from unwrapping a
 // string from the ",string" struct tag option. this is used only to
 // produce more helpful error messages.
-func (d *decodeState) literalStore(item []byte, v reflect.Value, fromQuoted bool) error {
+func literalStore(d *decodeState, item []byte, v reflect.Value, fromQuoted bool) error {
+	if v.IsValid() {
+		return &InvalidCloneError{Type: v.Type()}
+	}
 	// Check for unmarshaler.
 	if len(item) == 0 {
 		//Empty string given
@@ -801,7 +767,7 @@ func setTypeNumber(d *decodeState, v reflect.Value, s string) bool {
 }
 
 func setInterfaceNumber(d *decodeState, v reflect.Value, s string) error {
-	n, err := d.convertNumber(s)
+	n, err := convertNumber(d, s)
 	if err != nil {
 		return err
 	}
@@ -841,24 +807,24 @@ func setFloatNumber(d *decodeState, v reflect.Value, n float64, s string) error 
 // but they avoid the weight of reflection in this common case.
 
 // valueInterface is like value but returns interface{}
-func (d *decodeState) valueInterface() (val any) {
+func valueInterface(d *decodeState) (val any) {
 	switch d.opcode {
 	default:
 		panic(phasePanicMsg)
 	case scanBeginArray:
-		val = d.arrayInterface()
+		val = arrayInterface(d)
 		d.scanNext()
 	case scanBeginObject:
-		val = d.objectInterface()
+		val = objectInterface(d)
 		d.scanNext()
 	case scanBeginLiteral:
-		val = d.literalInterface()
+		val = literalInterface(d)
 	}
 	return
 }
 
 // arrayInterface is like array but returns []interface{}.
-func (d *decodeState) arrayInterface() []any {
+func arrayInterface(d *decodeState) []any {
 	var v = make([]any, 0)
 	for {
 		// Look ahead for ] - can only happen on first iteration.
@@ -867,7 +833,7 @@ func (d *decodeState) arrayInterface() []any {
 			break
 		}
 
-		v = append(v, d.valueInterface())
+		v = append(v, valueInterface(d))
 
 		// Next token must be , or ].
 		if d.opcode == scanSkipSpace {
@@ -884,7 +850,7 @@ func (d *decodeState) arrayInterface() []any {
 }
 
 // objectInterface is like object but returns map[string]interface{}.
-func (d *decodeState) objectInterface() map[string]any {
+func objectInterface(d *decodeState) map[string]any {
 	m := make(map[string]any)
 	for {
 		// Read opening " of string key or closing }.
@@ -916,7 +882,7 @@ func (d *decodeState) objectInterface() map[string]any {
 		d.scanWhile(scanSkipSpace)
 
 		// Read value.
-		m[key] = d.valueInterface()
+		m[key] = valueInterface(d)
 
 		// Next token must be , or }.
 		if d.opcode == scanSkipSpace {
@@ -935,7 +901,7 @@ func (d *decodeState) objectInterface() map[string]any {
 // literalInterface consumes and returns a literal from d.data[d.off-1:] and
 // it reads the following byte ahead. The first byte of the literal has been
 // read already (that's how the caller knows it's a literal).
-func (d *decodeState) literalInterface() any {
+func literalInterface(d *decodeState) any {
 	// All bytes inside literal return scanContinue op code.
 	start := d.readIndex()
 	d.rescanLiteral()
@@ -960,7 +926,7 @@ func (d *decodeState) literalInterface() any {
 		if c != '-' && (c < '0' || c > '9') {
 			panic(phasePanicMsg)
 		}
-		n, err := d.convertNumber(string(item))
+		n, err := convertNumber(d, string(item))
 		if err != nil {
 			d.saveError(err)
 		}

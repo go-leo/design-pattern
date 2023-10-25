@@ -15,7 +15,6 @@ package prototype
 
 import (
 	"strconv"
-	"sync"
 )
 
 // A SyntaxError is a description of a JSON syntax error.
@@ -58,28 +57,6 @@ type scanner struct {
 	// total bytes consumed, updated by decoder.Decode (and deliberately
 	// not set to zero by scan.reset)
 	bytes int64
-}
-
-var scannerPool = sync.Pool{
-	New: func() any {
-		return &scanner{}
-	},
-}
-
-func newScanner() *scanner {
-	scan := scannerPool.Get().(*scanner)
-	// scan.reset by design doesn't set bytes to zero
-	scan.bytes = 0
-	scan.reset()
-	return scan
-}
-
-func freeScanner(scan *scanner) {
-	// Avoid hanging on to too much memory in extreme cases.
-	if len(scan.parseState) > 1024 {
-		scan.parseState = nil
-	}
-	scannerPool.Put(scan)
 }
 
 // These values are returned by the state transition functions
