@@ -6,7 +6,7 @@ import (
 	"github.com/go-leo/design-pattern/prototype/prototype"
 )
 
-func main() {
+func sampleArray() {
 	arr := []string{"1", "2", "3"}
 	var arr2 []string
 	err := prototype.Clone(&arr2, arr)
@@ -92,7 +92,8 @@ func Unsupported() {
 	}
 }
 
-func JsonUnmarshal() {
+// func JsonUnmarshal() {
+func main() {
 	var b bool
 	err := json.Unmarshal([]byte("true"), &b)
 	if err != nil {
