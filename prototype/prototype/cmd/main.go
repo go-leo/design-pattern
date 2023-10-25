@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/go-leo/design-pattern/prototype/prototype"
 )
@@ -95,7 +94,7 @@ func Unsupported() {
 // func JsonUnmarshal() {
 func main() {
 	var b bool
-	err := json.Unmarshal([]byte("true"), &b)
+	err := prototype.Unmarshal([]byte("true"), &b)
 	if err != nil {
 		fmt.Println("error:", err)
 	}

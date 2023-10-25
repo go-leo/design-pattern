@@ -4,6 +4,7 @@ import (
 	"encoding"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -221,7 +222,7 @@ func (d *decodeState) valueQuoted() any {
 // array consumes an array from d.data[d.off-1:], decoding into v.
 // The first byte of the array ('[') has been read already.
 func array(d *decodeState, v reflect.Value) error {
-	if v.IsValid() {
+	if !v.IsValid() {
 		return &InvalidCloneError{Type: v.Type()}
 	}
 	// Check for unmarshaler.
@@ -324,7 +325,7 @@ var nullLiteral = []byte("null")
 // object consumes an object from d.data[d.off-1:], decoding into v.
 // The first byte ('{') of the object has been read already.
 func object(d *decodeState, v reflect.Value) error {
-	if v.IsValid() {
+	if !v.IsValid() {
 		return &InvalidCloneError{Type: v.Type()}
 	}
 	// Check for unmarshaler.
@@ -571,22 +572,18 @@ func convertNumber(d *decodeState, s string) (any, error) {
 // string from the ",string" struct tag option. this is used only to
 // produce more helpful error messages.
 func literalStore(d *decodeState, item []byte, v reflect.Value, fromQuoted bool) error {
-	if v.IsValid() {
+	if !v.IsValid() {
 		return &InvalidCloneError{Type: v.Type()}
 	}
-	// Check for unmarshaler.
 	if len(item) == 0 {
-		//Empty string given
-		d.saveError(fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type()))
-		return nil
+		return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 	}
 	isNull := item[0] == 'n' // null
 	ut, pv := indirect(v, isNull)
 	if ut != nil {
 		if item[0] != '"' {
 			if fromQuoted {
-				d.saveError(fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type()))
-				return nil
+				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 			}
 			val := "number"
 			switch item[0] {
@@ -595,48 +592,44 @@ func literalStore(d *decodeState, item []byte, v reflect.Value, fromQuoted bool)
 			case 't', 'f':
 				val = "bool"
 			}
-			d.saveError(&UnmarshalTypeError{Value: val, Type: v.Type(), Offset: int64(d.readIndex())})
-			return nil
+			return &UnmarshalTypeError{Value: val, Type: v.Type(), Offset: int64(d.readIndex())}
 		}
 		s, ok := unquoteBytes(item)
 		if !ok {
 			if fromQuoted {
 				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 			}
-			panic(phasePanicMsg)
+			return errors.New(phasePanicMsg)
 		}
 		return ut.UnmarshalText(s)
 	}
+	return aaa(d, item, pv, fromQuoted)
+}
 
-	v = pv
-
+func aaa(d *decodeState, item []byte, v reflect.Value, fromQuoted bool) error {
 	switch c := item[0]; c {
-	case 'n': // null
+	case 'n':
+		// null
 		// The main parser checks that only true and false can reach here,
 		// but if this was a quoted string input, it could be anything.
 		if fromQuoted && string(item) != "null" {
-			d.saveError(fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type()))
-			break
+			return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 		}
-		switch v.Kind() {
-		case reflect.Interface, reflect.Pointer, reflect.Map, reflect.Slice:
-			v.Set(reflect.Zero(v.Type()))
-			// otherwise, ignore null for primitives/string
-		}
-	case 't', 'f': // true, false
+		setNil(v)
+	case 't', 'f':
+		// true, false
 		value := item[0] == 't'
 		// The main parser checks that only true and false can reach here,
 		// but if this was a quoted string input, it could be anything.
 		if fromQuoted && string(item) != "true" && string(item) != "false" {
-			d.saveError(fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type()))
-			break
+			return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 		}
 		switch v.Kind() {
 		default:
 			if fromQuoted {
-				d.saveError(fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type()))
+				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 			} else {
-				d.saveError(&UnmarshalTypeError{Value: "bool", Type: v.Type(), Offset: int64(d.readIndex())})
+				return &UnmarshalTypeError{Value: "bool", Type: v.Type(), Offset: int64(d.readIndex())}
 			}
 		case reflect.Bool:
 			v.SetBool(value)
@@ -644,31 +637,30 @@ func literalStore(d *decodeState, item []byte, v reflect.Value, fromQuoted bool)
 			if v.NumMethod() == 0 {
 				v.Set(reflect.ValueOf(value))
 			} else {
-				d.saveError(&UnmarshalTypeError{Value: "bool", Type: v.Type(), Offset: int64(d.readIndex())})
+				return &UnmarshalTypeError{Value: "bool", Type: v.Type(), Offset: int64(d.readIndex())}
 			}
 		}
 
-	case '"': // string
+	case '"':
+		// string
 		s, ok := unquoteBytes(item)
 		if !ok {
 			if fromQuoted {
 				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 			}
-			panic(phasePanicMsg)
+			return errors.New(phasePanicMsg)
 		}
 		switch v.Kind() {
 		default:
-			d.saveError(&UnmarshalTypeError{Value: "string", Type: v.Type(), Offset: int64(d.readIndex())})
+			return &UnmarshalTypeError{Value: "string", Type: v.Type(), Offset: int64(d.readIndex())}
 		case reflect.Slice:
 			if v.Type().Elem().Kind() != reflect.Uint8 {
-				d.saveError(&UnmarshalTypeError{Value: "string", Type: v.Type(), Offset: int64(d.readIndex())})
-				break
+				return &UnmarshalTypeError{Value: "string", Type: v.Type(), Offset: int64(d.readIndex())}
 			}
 			b := make([]byte, base64.StdEncoding.DecodedLen(len(s)))
 			n, err := base64.StdEncoding.Decode(b, s)
 			if err != nil {
-				d.saveError(err)
-				break
+				return err
 			}
 			v.SetBytes(b[:n])
 		case reflect.String:
@@ -680,54 +672,44 @@ func literalStore(d *decodeState, item []byte, v reflect.Value, fromQuoted bool)
 			if v.NumMethod() == 0 {
 				v.Set(reflect.ValueOf(string(s)))
 			} else {
-				d.saveError(&UnmarshalTypeError{Value: "string", Type: v.Type(), Offset: int64(d.readIndex())})
+				return &UnmarshalTypeError{Value: "string", Type: v.Type(), Offset: int64(d.readIndex())}
 			}
 		}
 
-	default: // number
+	default:
+		// number
 		if c != '-' && (c < '0' || c > '9') {
 			if fromQuoted {
 				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 			}
-			panic(phasePanicMsg)
+			return errors.New(phasePanicMsg)
 		}
 		s := string(item)
 		switch v.Kind() {
 		default:
 			if setTypeNumber(d, v, s) {
-				break
+				return nil
 			}
 			if fromQuoted {
 				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 			}
-			d.saveError(&UnmarshalTypeError{Value: "number", Type: v.Type(), Offset: int64(d.readIndex())})
+			return &UnmarshalTypeError{Value: "number", Type: v.Type(), Offset: int64(d.readIndex())}
 		case reflect.Interface:
-			if err := setInterfaceNumber(d, v, s); err != nil {
-				d.saveError(err)
-				break
-			}
+			return setInterfaceNumber(d, v, s)
 
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			n, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
-				d.saveError(&UnmarshalTypeError{Value: "number " + s, Type: v.Type(), Offset: int64(d.readIndex())})
-				break
+				return &UnmarshalTypeError{Value: "number " + s, Type: v.Type(), Offset: int64(d.readIndex())}
 			}
-			if err = setIntNumber(d, v, n, s); err != nil {
-				d.saveError(err)
-				break
-			}
+			return setIntNumber(d, v, n, s)
 
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 			n, err := strconv.ParseUint(s, 10, 64)
 			if err != nil {
-				d.saveError(&UnmarshalTypeError{Value: "number " + s, Type: v.Type(), Offset: int64(d.readIndex())})
-				break
+				return &UnmarshalTypeError{Value: "number " + s, Type: v.Type(), Offset: int64(d.readIndex())}
 			}
-			if err = setUintNumber(d, v, n, s); err != nil {
-				d.saveError(err)
-				break
-			}
+			return setUintNumber(d, v, n, s)
 
 		case reflect.Float32, reflect.Float64:
 			n, err := strconv.ParseFloat(s, v.Type().Bits())
@@ -735,13 +717,19 @@ func literalStore(d *decodeState, item []byte, v reflect.Value, fromQuoted bool)
 				d.saveError(&UnmarshalTypeError{Value: "number " + s, Type: v.Type(), Offset: int64(d.readIndex())})
 				break
 			}
-			if err = setFloatNumber(d, v, n, s); err != nil {
-				d.saveError(err)
-				break
-			}
+			return setFloatNumber(d, v, n, s)
+
 		}
 	}
 	return nil
+}
+
+func setNil(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Interface, reflect.Pointer, reflect.Map, reflect.Slice:
+		v.Set(reflect.Zero(v.Type()))
+		// otherwise, ignore null for primitives/string
+	}
 }
 
 func setTypeNumber(d *decodeState, v reflect.Value, s string) bool {
