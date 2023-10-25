@@ -225,12 +225,7 @@ func array(d *decodeState, v reflect.Value) error {
 		return &InvalidCloneError{Type: v.Type()}
 	}
 	// Check for unmarshaler.
-	u, ut, pv := indirect(v, false)
-	if u != nil {
-		start := d.readIndex()
-		d.skip()
-		return u.UnmarshalJSON(d.data[start:d.off])
-	}
+	ut, pv := indirect(v, false)
 	if ut != nil {
 		d.saveError(&UnmarshalTypeError{Value: "array", Type: v.Type(), Offset: int64(d.off)})
 		d.skip()
@@ -333,12 +328,7 @@ func object(d *decodeState, v reflect.Value) error {
 		return &InvalidCloneError{Type: v.Type()}
 	}
 	// Check for unmarshaler.
-	u, ut, pv := indirect(v, false)
-	if u != nil {
-		start := d.readIndex()
-		d.skip()
-		return u.UnmarshalJSON(d.data[start:d.off])
-	}
+	ut, pv := indirect(v, false)
 	if ut != nil {
 		d.saveError(&UnmarshalTypeError{Value: "object", Type: v.Type(), Offset: int64(d.off)})
 		d.skip()
@@ -591,10 +581,7 @@ func literalStore(d *decodeState, item []byte, v reflect.Value, fromQuoted bool)
 		return nil
 	}
 	isNull := item[0] == 'n' // null
-	u, ut, pv := indirect(v, isNull)
-	if u != nil {
-		return u.UnmarshalJSON(item)
-	}
+	ut, pv := indirect(v, isNull)
 	if ut != nil {
 		if item[0] != '"' {
 			if fromQuoted {
@@ -1085,7 +1072,7 @@ func unquoteBytes(s []byte) (t []byte, ok bool) {
 // If it encounters an Unmarshaler, indirect stops and returns that.
 // If decodingNull is true, indirect stops at the first settable pointer so it
 // can be set to nil.
-func indirect(v reflect.Value, decodingNull bool) (Unmarshaler, encoding.TextUnmarshaler, reflect.Value) {
+func indirect(v reflect.Value, decodingNull bool) (encoding.TextUnmarshaler, reflect.Value) {
 	// Issue #24153 indicates that it is generally not a guaranteed property
 	// that you may round-trip a reflect.Value by calling Value.Addr().Elem()
 	// and expect the value to still be settable for values derived from
@@ -1138,12 +1125,9 @@ func indirect(v reflect.Value, decodingNull bool) (Unmarshaler, encoding.TextUnm
 			v.Set(reflect.New(v.Type().Elem()))
 		}
 		if v.Type().NumMethod() > 0 && v.CanInterface() {
-			if u, ok := v.Interface().(Unmarshaler); ok {
-				return u, nil, reflect.Value{}
-			}
 			if !decodingNull {
 				if u, ok := v.Interface().(encoding.TextUnmarshaler); ok {
-					return nil, u, reflect.Value{}
+					return u, reflect.Value{}
 				}
 			}
 		}
@@ -1155,5 +1139,5 @@ func indirect(v reflect.Value, decodingNull bool) (Unmarshaler, encoding.TextUnm
 			v = v.Elem()
 		}
 	}
-	return nil, nil, v
+	return nil, v
 }

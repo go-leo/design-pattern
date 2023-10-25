@@ -24,6 +24,6 @@ var (
 //
 // By convention, to approximate the behavior of Unmarshal itself,
 // Unmarshalers implement UnmarshalJSON([]byte("null")) as a no-op.
-type Unmarshaler interface {
-	UnmarshalJSON([]byte) error
-}
+//type Unmarshaler interface {
+//	UnmarshalJSON([]byte) error
+//}
