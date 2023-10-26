@@ -172,7 +172,10 @@ func setArrayOrSlice(d *decodeState, v reflect.Value) error {
 func setArrayInterface(d *decodeState, v reflect.Value) error {
 	if v.NumMethod() == 0 {
 		// Decoding into nil interface? Switch to non-reflect code.
-		ai := arrayInterface(d)
+		ai, err := arrayInterface(d)
+		if err != nil {
+			return err
+		}
 		v.Set(reflect.ValueOf(ai))
 		return nil
 	}
@@ -196,7 +199,10 @@ func object(d *decodeState, v reflect.Value) error {
 
 	// Decoding into nil interface? Switch to non-reflect code.
 	if v.Kind() == reflect.Interface && v.NumMethod() == 0 {
-		oi := objectInterface(d)
+		oi, err := objectInterface(d)
+		if err != nil {
+			return err
+		}
 		v.Set(reflect.ValueOf(oi))
 		return nil
 	}
@@ -331,7 +337,10 @@ func object(d *decodeState, v reflect.Value) error {
 			case scanBeginArray, scanBeginObject:
 				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal unquoted value into %v", subv.Type())
 			case scanBeginLiteral:
-				v := literalInterface(d)
+				v, err := literalInterface(d)
+				if err != nil {
+					return err
+				}
 				switch qv := v.(type) {
 				case nil:
 					if err := literalStore([]byte("null"), subv, false); err != nil {
@@ -648,24 +657,26 @@ func setFloatNumber(v reflect.Value, n float64, s string) error {
 // but they avoid the weight of reflection in this common case.
 
 // valueInterface is like value but returns interface{}
-func valueInterface(d *decodeState) (val any) {
+func valueInterface(d *decodeState) (any, error) {
 	switch d.opcode {
 	default:
-		return ErrPhase
+		return nil, ErrPhase
 	case scanBeginArray:
-		val = arrayInterface(d)
+		val, err := arrayInterface(d)
 		d.scanNext()
+		return val, err
 	case scanBeginObject:
-		val = objectInterface(d)
+		val, err := objectInterface(d)
 		d.scanNext()
+		return val, err
 	case scanBeginLiteral:
-		val = literalInterface(d)
+		val, err := literalInterface(d)
+		return val, err
 	}
-	return
 }
 
 // arrayInterface is like array but returns []interface{}.
-func arrayInterface(d *decodeState) []any {
+func arrayInterface(d *decodeState) ([]any, error) {
 	var v = make([]any, 0)
 	for {
 		// Look ahead for ] - can only happen on first iteration.
@@ -674,7 +685,11 @@ func arrayInterface(d *decodeState) []any {
 			break
 		}
 
-		v = append(v, valueInterface(d))
+		vi, err := valueInterface(d)
+		if err != nil {
+			return nil, err
+		}
+		v = append(v, vi)
 
 		// Next token must be , or ].
 		if d.opcode == scanSkipSpace {
@@ -684,14 +699,14 @@ func arrayInterface(d *decodeState) []any {
 			break
 		}
 		if d.opcode != scanArrayValue {
-			panic(ErrPhase)
+			return nil, ErrPhase
 		}
 	}
-	return v
+	return v, nil
 }
 
 // objectInterface is like object but returns map[string]interface{}.
-func objectInterface(d *decodeState) map[string]any {
+func objectInterface(d *decodeState) (map[string]any, error) {
 	m := make(map[string]any)
 	for {
 		// Read opening " of string key or closing }.
@@ -701,7 +716,7 @@ func objectInterface(d *decodeState) map[string]any {
 			break
 		}
 		if d.opcode != scanBeginLiteral {
-			panic(ErrPhase)
+			return nil, ErrPhase
 		}
 
 		// Read string key.
@@ -710,7 +725,7 @@ func objectInterface(d *decodeState) map[string]any {
 		item := d.data[start:d.readIndex()]
 		key, ok := unquote(item)
 		if !ok {
-			panic(ErrPhase)
+			return nil, ErrPhase
 		}
 
 		// Read : before value.
@@ -718,13 +733,16 @@ func objectInterface(d *decodeState) map[string]any {
 			d.scanWhile(scanSkipSpace)
 		}
 		if d.opcode != scanObjectKey {
-			panic(ErrPhase)
+			return nil, ErrPhase
 		}
 		d.scanWhile(scanSkipSpace)
 
 		// Read value.
-		m[key] = valueInterface(d)
-
+		vi, err := valueInterface(d)
+		if err != nil {
+			return nil, ErrPhase
+		}
+		m[key] = vi
 		// Next token must be , or }.
 		if d.opcode == scanSkipSpace {
 			d.scanWhile(scanSkipSpace)
@@ -733,16 +751,16 @@ func objectInterface(d *decodeState) map[string]any {
 			break
 		}
 		if d.opcode != scanObjectValue {
-			panic(ErrPhase)
+			return nil, ErrPhase
 		}
 	}
-	return m
+	return m, nil
 }
 
 // literalInterface consumes and returns a literal from d.data[d.off-1:] and
 // it reads the following byte ahead. The first byte of the literal has been
 // read already (that's how the caller knows it's a literal).
-func literalInterface(d *decodeState) any {
+func literalInterface(d *decodeState) (any, error) {
 	// All bytes inside literal return scanContinue op code.
 	start := d.readIndex()
 	d.rescanLiteral()
@@ -751,27 +769,27 @@ func literalInterface(d *decodeState) any {
 
 	switch c := item[0]; c {
 	case 'n': // null
-		return nil
+		return nil, nil
 
 	case 't', 'f': // true, false
-		return c == 't'
+		return c == 't', nil
 
 	case '"': // string
 		s, ok := unquote(item)
 		if !ok {
-			return ErrPhase
+			return nil, ErrPhase
 		}
-		return s
+		return s, nil
 
 	default: // number
 		if c != '-' && (c < '0' || c > '9') {
-			return ErrPhase
+			return nil, ErrPhase
 		}
 		n, err := convertNumber(string(item))
 		if err != nil {
 			d.saveError(err)
 		}
-		return n
+		return n, nil
 	}
 }
 

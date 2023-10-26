@@ -93,10 +93,18 @@ func Unsupported() {
 
 // func JsonUnmarshal() {
 func main() {
-	var b bool
-	err := prototype.Unmarshal([]byte("true"), &b)
+	var jsonBlob = []byte(`[
+	{"Name": "Platypus", "Order": "Monotremata"},
+	{"Name": "Quoll",    "Order": "Dasyuromorphia"}
+]`)
+	type Animal struct {
+		Name  string
+		Order string
+	}
+	var animals []Animal
+	err := prototype.Unmarshal(jsonBlob, &animals)
 	if err != nil {
 		fmt.Println("error:", err)
 	}
-	fmt.Println(b)
+	fmt.Printf("%+v", animals)
 }
