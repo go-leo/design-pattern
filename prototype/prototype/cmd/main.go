@@ -6,6 +6,7 @@ import (
 )
 
 func sampleArray() {
+	//func main() {
 	arr := []string{"1", "2", "3"}
 	var arr2 []string
 	err := prototype.Clone(&arr2, arr)
@@ -24,7 +25,7 @@ func number() {
 }
 
 // func mainSample() {
-func mainSample() {
+func main() {
 	type ColorGroup struct {
 		ID     int
 		Name   string
@@ -91,8 +92,8 @@ func Unsupported() {
 	}
 }
 
-// func JsonUnmarshal() {
-func main() {
+func SampleUnmarshal() {
+	//func main() {
 	var jsonBlob = []byte(`[
 	{"Name": "Platypus", "Order": "Monotremata"},
 	{"Name": "Quoll",    "Order": "Dasyuromorphia"}

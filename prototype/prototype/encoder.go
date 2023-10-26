@@ -13,69 +13,69 @@ import (
 	"strings"
 )
 
-type encoderFunc func(e *cloneState, fks []string, srcVal reflect.Value, opts options) error
+type encoderFunc func(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error
 
 func printValue(e *cloneState, fks []string, val any, opts options) error {
 	fmt.Println(strings.Join(fks, "."), "=", val)
 	return nil
 }
 
-func invalidValueEncoder(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	return writeNull(e, fks, v, opts)
+func invalidValueEncoder(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	return writeNull(e, fks, tgtVal, srcVal, opts)
 }
 
-func writeNull(e *cloneState, fks []string, v reflect.Value, opts options) error {
+func writeNull(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
 	return printValue(e, fks, "null", opts)
 }
 
-func textMarshalerEncoder(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	if v.Kind() == reflect.Pointer && v.IsNil() {
-		return writeNull(e, fks, v, opts)
+func textMarshalerEncoder(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	if srcVal.Kind() == reflect.Pointer && srcVal.IsNil() {
+		return writeNull(e, fks, tgtVal, srcVal, opts)
 	}
-	m, ok := v.Interface().(encoding.TextMarshaler)
+	m, ok := srcVal.Interface().(encoding.TextMarshaler)
 	if !ok {
-		return writeNull(e, fks, v, opts)
+		return writeNull(e, fks, tgtVal, srcVal, opts)
 	}
 	b, err := m.MarshalText()
 	if err != nil {
-		return &MarshalerError{v.Type(), err, "MarshalText"}
+		return &MarshalerError{srcVal.Type(), err, "MarshalText"}
 	}
 	return printValue(e, fks, string(b), opts)
 }
 
-func addrTextMarshalerEncoder(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	va := v.Addr()
+func addrTextMarshalerEncoder(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	va := srcVal.Addr()
 	if va.IsNil() {
-		return writeNull(e, fks, v, opts)
+		return writeNull(e, fks, tgtVal, srcVal, opts)
 	}
 	m := va.Interface().(encoding.TextMarshaler)
 	b, err := m.MarshalText()
 	if err != nil {
-		return &MarshalerError{v.Type(), err, "MarshalText"}
+		return &MarshalerError{srcVal.Type(), err, "MarshalText"}
 	}
 	return printValue(e, fks, string(b), opts)
 }
 
-func boolEncoder(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	return printValue(e, fks, v.Bool(), opts)
+func boolEncoder(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	return printValue(e, fks, srcVal.Bool(), opts)
 }
 
-func intEncoder(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	return printValue(e, fks, v.Int(), opts)
+func intEncoder(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	return printValue(e, fks, srcVal.Int(), opts)
 }
 
-func uintEncoder(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	return printValue(e, fks, v.Uint(), opts)
+func uintEncoder(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	return printValue(e, fks, srcVal.Uint(), opts)
 }
 
 type floatEncoder int // number of bits
 
-func (bits floatEncoder) encode(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	f := v.Float()
+func (bits floatEncoder) encode(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	f := srcVal.Float()
 	if math.IsInf(f, 0) || math.IsNaN(f) {
-		return &UnsupportedValueError{v, strconv.FormatFloat(f, 'g', -1, int(bits))}
+		return &UnsupportedValueError{Value: srcVal, Str: strconv.FormatFloat(f, 'g', -1, int(bits))}
 	}
-	return printValue(e, fks, v.Float(), opts)
+	return printValue(e, fks, srcVal.Float(), opts)
 }
 
 var (
@@ -83,9 +83,9 @@ var (
 	float64Encoder = (floatEncoder(64)).encode
 )
 
-func stringEncoder(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	if v.Type() == numberType {
-		numStr := v.String()
+func stringEncoder(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	if srcVal.Type() == numberType {
+		numStr := srcVal.String()
 		// In Go1.5 the empty string encodes to "0", while this is not a valid number literal
 		// we keep compatibility so check validity after this.
 		if numStr == "" {
@@ -94,9 +94,9 @@ func stringEncoder(e *cloneState, fks []string, v reflect.Value, opts options) e
 		if !isValidNumber(numStr) {
 			return fmt.Errorf("json: invalid number literal %q", numStr)
 		}
-		return printValue(e, fks, v.String(), opts)
+		return printValue(e, fks, srcVal.String(), opts)
 	}
-	return printValue(e, fks, v.String(), opts)
+	return printValue(e, fks, srcVal.String(), opts)
 }
 
 // isValidNumber reports whether s is a valid JSON number literal.
@@ -159,12 +159,12 @@ func isValidNumber(s string) bool {
 	return s == ""
 }
 
-func interfaceEncoder(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	if v.IsNil() {
-		return writeNull(e, fks, v, opts)
+func interfaceEncoder(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	if srcVal.IsNil() {
+		return writeNull(e, fks, tgtVal, srcVal, opts)
 	}
-	value := v.Elem()
-	return valueEncoder(value)(e, fks, value, opts)
+	value := srcVal.Elem()
+	return valueEncoder(value)(e, fks, tgtVal, value, opts)
 }
 
 type structEncoder struct {
@@ -176,13 +176,13 @@ type structFields struct {
 	nameIndex map[string]int
 }
 
-func (se structEncoder) encode(e *cloneState, fks []string, v reflect.Value, opts options) error {
+func (se structEncoder) encode(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
 FieldLoop:
 	for i := range se.fields.list {
 		f := &se.fields.list[i]
 
 		// Find the nested struct field by following f.index.
-		fv := v
+		fv := srcVal
 		for _, i := range f.index {
 			if fv.Kind() == reflect.Pointer {
 				if fv.IsNil() {
@@ -196,7 +196,7 @@ FieldLoop:
 		if f.omitEmpty && reflectx.IsEmptyValue(fv) {
 			continue
 		}
-		if err := f.encoder(e, append(fks, f.name), fv, opts); err != nil {
+		if err := f.encoder(e, append(fks, f.name), tgtVal, fv, opts); err != nil {
 			return err
 		}
 	}
@@ -208,39 +208,69 @@ func newStructEncoder(t reflect.Type) encoderFunc {
 	return se.encode
 }
 
+type reflectWithString struct {
+	k  reflect.Value
+	v  reflect.Value
+	ks string
+}
+
+func (w *reflectWithString) resolve() error {
+	if w.k.Kind() == reflect.String {
+		w.ks = w.k.String()
+		return nil
+	}
+	if tm, ok := w.k.Interface().(encoding.TextMarshaler); ok {
+		if w.k.Kind() == reflect.Pointer && w.k.IsNil() {
+			return nil
+		}
+		buf, err := tm.MarshalText()
+		w.ks = string(buf)
+		return err
+	}
+	switch w.k.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		w.ks = strconv.FormatInt(w.k.Int(), 10)
+		return nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		w.ks = strconv.FormatUint(w.k.Uint(), 10)
+		return nil
+	}
+	panic("unexpected map key type")
+}
+
 type mapEncoder struct {
 	elemEnc encoderFunc
 }
 
-func (me mapEncoder) encode(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	if v.IsNil() {
-		return writeNull(e, fks, v, opts)
+func (me mapEncoder) encode(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	if srcVal.IsNil() {
+		return writeNull(e, fks, tgtVal, srcVal, opts)
 	}
 	if e.forward(); e.isTooDeep() {
 		// We're a large number of nested ptrEncoder.encode calls deep;
 		// start checking if we've run into a pointer cycle.
-		ptr := v.UnsafePointer()
+		ptr := srcVal.UnsafePointer()
 		if e.isSeen(ptr) {
-			return &UnsupportedValueError{v, fmt.Sprintf("encountered a cycle via %s", v.Type())}
+			return &UnsupportedValueError{Value: srcVal, Str: fmt.Sprintf("encountered a cycle via %s", srcVal.Type())}
 		}
 		e.remember(ptr)
 		defer e.forget(ptr)
 	}
 
 	// Extract and sort the keys.
-	sv := make([]reflectWithString, v.Len())
-	mi := v.MapRange()
+	sv := make([]reflectWithString, srcVal.Len())
+	mi := srcVal.MapRange()
 	for i := 0; mi.Next(); i++ {
 		sv[i].k = mi.Key()
 		sv[i].v = mi.Value()
 		if err := sv[i].resolve(); err != nil {
-			return fmt.Errorf("json: encoding error for type %q: %q", v.Type().String(), err.Error())
+			return fmt.Errorf("json: encoding error for type %q: %q", srcVal.Type().String(), err.Error())
 		}
 	}
 	sort.Slice(sv, func(i, j int) bool { return sv[i].ks < sv[j].ks })
 
 	for _, kv := range sv {
-		if err := me.elemEnc(e, append(slices.Clone(fks), kv.ks), kv.v, opts); err != nil {
+		if err := me.elemEnc(e, append(slices.Clone(fks), kv.ks), tgtVal, kv.v, opts); err != nil {
 			return err
 		}
 	}
@@ -262,11 +292,11 @@ func newMapEncoder(t reflect.Type) encoderFunc {
 	return me.encode
 }
 
-func encodeByteSlice(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	if v.IsNil() {
-		return writeNull(e, fks, v, opts)
+func encodeByteSlice(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	if srcVal.IsNil() {
+		return writeNull(e, fks, tgtVal, srcVal, opts)
 	}
-	return printValue(e, fks, string(v.Bytes()), opts)
+	return printValue(e, fks, string(srcVal.Bytes()), opts)
 }
 
 // sliceEncoder just wraps an arrayEncoder, checking to make sure the value isn't nil.
@@ -274,9 +304,9 @@ type sliceEncoder struct {
 	arrayEnc encoderFunc
 }
 
-func (se sliceEncoder) encode(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	if v.IsNil() {
-		return writeNull(e, fks, v, opts)
+func (se sliceEncoder) encode(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	if srcVal.IsNil() {
+		return writeNull(e, fks, tgtVal, srcVal, opts)
 	}
 	if e.forward(); e.isTooDeep() {
 		// We're a large number of nested ptrEncoder.encode calls deep;
@@ -286,14 +316,14 @@ func (se sliceEncoder) encode(e *cloneState, fks []string, v reflect.Value, opts
 		ptr := struct {
 			ptr interface{} // always an unsafe.Pointer, but avoids a dependency on package unsafe
 			len int
-		}{v.UnsafePointer(), v.Len()}
+		}{srcVal.UnsafePointer(), srcVal.Len()}
 		if e.isSeen(ptr) {
-			return &UnsupportedValueError{v, fmt.Sprintf("encountered a cycle via %s", v.Type())}
+			return &UnsupportedValueError{Value: srcVal, Str: fmt.Sprintf("encountered a cycle via %s", srcVal.Type())}
 		}
 		e.remember(ptr)
 		defer e.forget(ptr)
 	}
-	if err := se.arrayEnc(e, fks, v, opts); err != nil {
+	if err := se.arrayEnc(e, fks, tgtVal, srcVal, opts); err != nil {
 		return err
 	}
 	e.back()
@@ -316,10 +346,10 @@ type arrayEncoder struct {
 	elemEnc encoderFunc
 }
 
-func (ae arrayEncoder) encode(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	n := v.Len()
+func (ae arrayEncoder) encode(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	n := srcVal.Len()
 	for i := 0; i < n; i++ {
-		if err := ae.elemEnc(e, append(slices.Clone(fks), convx.ToString(i)), v.Index(i), opts); err != nil {
+		if err := ae.elemEnc(e, append(slices.Clone(fks), convx.ToString(i)), tgtVal, srcVal.Index(i), opts); err != nil {
 			return err
 		}
 	}
@@ -335,21 +365,21 @@ type ptrEncoder struct {
 	elemEnc encoderFunc
 }
 
-func (pe ptrEncoder) encode(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	if v.IsNil() {
-		return writeNull(e, fks, v, opts)
+func (pe ptrEncoder) encode(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	if srcVal.IsNil() {
+		return writeNull(e, fks, tgtVal, srcVal, opts)
 	}
 	if e.forward(); e.isTooDeep() {
 		// We're a large number of nested ptrEncoder.encode calls deep;
 		// start checking if we've run into a pointer cycle.
-		ptr := v.Interface()
+		ptr := srcVal.Interface()
 		if e.isSeen(ptr) {
-			return &UnsupportedValueError{v, fmt.Sprintf("encountered a cycle via %s", v.Type())}
+			return &UnsupportedValueError{Value: srcVal, Str: fmt.Sprintf("encountered a cycle via %s", srcVal.Type())}
 		}
 		e.remember(ptr)
 		defer e.forget(ptr)
 	}
-	if err := pe.elemEnc(e, fks, v.Elem(), opts); err != nil {
+	if err := pe.elemEnc(e, fks, tgtVal, srcVal.Elem(), opts); err != nil {
 		return err
 	}
 	e.back()
@@ -365,11 +395,11 @@ type condAddrEncoder struct {
 	canAddrEnc, elseEnc encoderFunc
 }
 
-func (ce condAddrEncoder) encode(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	if v.CanAddr() {
-		return ce.canAddrEnc(e, fks, v, opts)
+func (ce condAddrEncoder) encode(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	if srcVal.CanAddr() {
+		return ce.canAddrEnc(e, fks, tgtVal, srcVal, opts)
 	}
-	return ce.elseEnc(e, fks, v, opts)
+	return ce.elseEnc(e, fks, tgtVal, srcVal, opts)
 }
 
 // newCondAddrEncoder returns an encoder that checks whether its value
@@ -379,36 +409,6 @@ func newCondAddrEncoder(canAddrEnc, elseEnc encoderFunc) encoderFunc {
 	return enc.encode
 }
 
-func unsupportedTypeEncoder(e *cloneState, fks []string, v reflect.Value, opts options) error {
-	return &UnsupportedTypeError{v.Type()}
+func unsupportedTypeEncoder(e *cloneState, fks []string, tgtVal, srcVal reflect.Value, opts options) error {
+	return &UnsupportedTypeError{srcVal.Type()}
 }
-
-//
-//func marshalerEncoder(e *cloneState, fks []string, v reflect.Value, opts options) error {
-//	if v.Kind() == reflect.Pointer && v.IsNil() {
-//		return writeNull(e, fks, v, opts)
-//	}
-//	m, ok := v.Interface().(Marshaler)
-//	if !ok {
-//		return writeNull(e, fks, v, opts)
-//	}
-//	b, err := m.MarshalJSON()
-//	if err != nil {
-//		return &MarshalerError{v.Type(), err, "MarshalJSON"}
-//	}
-//	return printValue(e, fks, string(b), opts)
-//}
-//
-//func addrMarshalerEncoder(e *cloneState, fks []string, v reflect.Value, opts options) error {
-//	va := v.Addr()
-//	if va.IsNil() {
-//		return writeNull(e, fks, v, opts)
-//	}
-//	m := va.Interface().(Marshaler)
-//	b, err := m.MarshalJSON()
-//	if err != nil {
-//		return &MarshalerError{v.Type(), err, "MarshalJSON"}
-//	}
-//	return printValue(e, fks, string(b), opts)
-//
-//}

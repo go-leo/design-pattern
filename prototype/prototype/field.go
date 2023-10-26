@@ -4,7 +4,9 @@ import (
 	"github.com/go-leo/gox/stringx"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
+	"unicode"
 )
 
 // A field represents a single field found in a struct.
@@ -242,4 +244,31 @@ func typeFields(t reflect.Type) structFields {
 		nameIndex[field.name] = i
 	}
 	return structFields{fields, nameIndex}
+}
+
+func typeByIndex(t reflect.Type, index []int) reflect.Type {
+	for _, i := range index {
+		if t.Kind() == reflect.Pointer {
+			t = t.Elem()
+		}
+		t = t.Field(i).Type
+	}
+	return t
+}
+
+func isValidTag(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		switch {
+		case strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", c):
+			// Backslash and quote chars are reserved, but
+			// otherwise any punctuation chars are allowed
+			// in a tag name.
+		case !unicode.IsLetter(c) && !unicode.IsDigit(c):
+			return false
+		}
+	}
+	return true
 }
