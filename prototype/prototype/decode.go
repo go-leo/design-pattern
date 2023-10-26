@@ -32,118 +32,10 @@ func unmarshal(d *decodeState, tgt any) error {
 	return value(d, tgtVal)
 }
 
-// decodeState represents the state while decoding a JSON value.
-type decodeState struct {
-	data                  []byte
-	off                   int // next read offset in data
-	opcode                int // last read result
-	scan                  scanner
-	disallowUnknownFields bool
-}
-
-// readIndex returns the position of the last byte read.
-func (d *decodeState) readIndex() int {
-	return d.off - 1
-}
-
 // phasePanicMsg is used as a panic message when we end up with something that
 // shouldn't happen. It can indicate a bug in the JSON decoder, or that
 // something is editing the data slice while the decoder executes.
-const phasePanicMsg = "JSON decoder out of sync - data changing underfoot?"
-
-// for reporting at the end of the unmarshal.
-func (d *decodeState) saveError(err error) {
-}
-
-// skip scans to the end of what was started.
-func (d *decodeState) skip() {
-	s, data, i := &d.scan, d.data, d.off
-	depth := len(s.parseState)
-	for {
-		op := s.step(s, data[i])
-		i++
-		if len(s.parseState) < depth {
-			d.off = i
-			d.opcode = op
-			return
-		}
-	}
-}
-
-// scanNext processes the byte at d.data[d.off].
-func (d *decodeState) scanNext() {
-	if d.off < len(d.data) {
-		d.opcode = d.scan.step(&d.scan, d.data[d.off])
-		d.off++
-	} else {
-		d.opcode = d.scan.eof()
-		d.off = len(d.data) + 1 // mark processed EOF with len+1
-	}
-}
-
-// scanWhile processes bytes in d.data[d.off:] until it
-// receives a scan code not equal to op.
-func (d *decodeState) scanWhile(op int) {
-	s, data, i := &d.scan, d.data, d.off
-	for i < len(data) {
-		newOp := s.step(s, data[i])
-		i++
-		if newOp != op {
-			d.opcode = newOp
-			d.off = i
-			return
-		}
-	}
-
-	d.off = len(data) + 1 // mark processed EOF with len+1
-	d.opcode = d.scan.eof()
-}
-
-// rescanLiteral is similar to scanWhile(scanContinue), but it specialises the
-// common case where we're decoding a literal. The decoder scans the input
-// twice, once for syntax errors and to check the length of the value, and the
-// second to perform the decoding.
-//
-// Only in the second step do we use decodeState to tokenize literals, so we
-// know there aren't any syntax errors. We can take advantage of that knowledge,
-// and scan a literal's bytes much more quickly.
-func (d *decodeState) rescanLiteral() {
-	data, i := d.data, d.off
-Switch:
-	switch data[i-1] {
-	case '"': // string
-		for ; i < len(data); i++ {
-			switch data[i] {
-			case '\\':
-				i++ // escaped char
-			case '"':
-				i++ // tokenize the closing quote too
-				break Switch
-			}
-		}
-	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-': // number
-		for ; i < len(data); i++ {
-			switch data[i] {
-			case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-				'.', 'e', 'E', '+', '-':
-			default:
-				break Switch
-			}
-		}
-	case 't': // true
-		i += len("rue")
-	case 'f': // false
-		i += len("alse")
-	case 'n': // null
-		i += len("ull")
-	}
-	if i < len(data) {
-		d.opcode = stateEndValue(&d.scan, data[i])
-	} else {
-		d.opcode = scanEnd
-	}
-	d.off = i + 1
-}
+var ErrPhase = errors.New("JSON decoder out of sync - data changing underfoot?")
 
 // value consumes a JSON value from d.data[d.off-1:], decoding into v, and
 // reads the following byte ahead. If v is invalid, the value is discarded.
@@ -151,7 +43,7 @@ Switch:
 func value(d *decodeState, v reflect.Value) error {
 	switch d.opcode {
 	default:
-		return errors.New(phasePanicMsg)
+		return ErrPhase
 	case scanBeginArray:
 		if v.IsValid() {
 			if err := array(d, v); err != nil {
@@ -201,86 +93,92 @@ func array(d *decodeState, v reflect.Value) error {
 	// Check type of target.
 	switch v.Kind() {
 	case reflect.Interface:
-		if v.NumMethod() == 0 {
-			// Decoding into nil interface? Switch to non-reflect code.
-			ai := arrayInterface(d)
-			v.Set(reflect.ValueOf(ai))
-			return nil
-		}
-		// Otherwise it's invalid.
-		return &UnmarshalTypeError{Value: "array", Type: v.Type()}
+		return setArrayInterface(d, v)
 	case reflect.Array, reflect.Slice:
-		i := 0
-		for {
-			// Look ahead for ] - can only happen on first iteration.
-			d.scanWhile(scanSkipSpace)
-			if d.opcode == scanEndArray {
-				break
-			}
-
-			// Get element of array, growing if necessary.
-			if v.Kind() == reflect.Slice {
-				// Grow slice if necessary
-				if i >= v.Cap() {
-					newcap := v.Cap() + v.Cap()/2
-					if newcap < 4 {
-						newcap = 4
-					}
-					newv := reflect.MakeSlice(v.Type(), v.Len(), newcap)
-					reflect.Copy(newv, v)
-					v.Set(newv)
-				}
-				if i >= v.Len() {
-					v.SetLen(i + 1)
-				}
-			}
-
-			if i < v.Len() {
-				// Decode into element.
-				if err := value(d, v.Index(i)); err != nil {
-					return err
-				}
-			} else {
-				// Ran out of fixed array: skip.
-				if err := value(d, reflect.Value{}); err != nil {
-					return err
-				}
-			}
-			i++
-
-			// Next token must be , or ].
-			if d.opcode == scanSkipSpace {
-				d.scanWhile(scanSkipSpace)
-			}
-			if d.opcode == scanEndArray {
-				break
-			}
-			if d.opcode != scanArrayValue {
-				panic(phasePanicMsg)
-			}
-		}
-
-		if i < v.Len() {
-			if v.Kind() == reflect.Array {
-				// Array. Zero the rest.
-				z := reflect.Zero(v.Type().Elem())
-				for ; i < v.Len(); i++ {
-					v.Index(i).Set(z)
-				}
-			} else {
-				v.SetLen(i)
-			}
-		}
-		if i == 0 && v.Kind() == reflect.Slice {
-			v.Set(reflect.MakeSlice(v.Type(), 0, 0))
-		}
-		return nil
+		return setArrayOrSlice(d, v)
 	default:
 		return &UnmarshalTypeError{Value: "array", Type: v.Type()}
 	}
 }
 
-var nullLiteral = []byte("null")
+func setArrayOrSlice(d *decodeState, v reflect.Value) error {
+	i := 0
+	for {
+		// Look ahead for ] - can only happen on first iteration.
+		d.scanWhile(scanSkipSpace)
+		if d.opcode == scanEndArray {
+			break
+		}
+
+		// Get element of array, growing if necessary.
+		if v.Kind() == reflect.Slice {
+			// Grow slice if necessary
+			if i >= v.Cap() {
+				newcap := v.Cap() + v.Cap()/2
+				if newcap < 4 {
+					newcap = 4
+				}
+				newv := reflect.MakeSlice(v.Type(), v.Len(), newcap)
+				reflect.Copy(newv, v)
+				v.Set(newv)
+			}
+			if i >= v.Len() {
+				v.SetLen(i + 1)
+			}
+		}
+
+		if i < v.Len() {
+			// Decode into element.
+			if err := value(d, v.Index(i)); err != nil {
+				return err
+			}
+		} else {
+			// Ran out of fixed array: skip.
+			if err := value(d, reflect.Value{}); err != nil {
+				return err
+			}
+		}
+		i++
+
+		// Next token must be , or ].
+		if d.opcode == scanSkipSpace {
+			d.scanWhile(scanSkipSpace)
+		}
+		if d.opcode == scanEndArray {
+			break
+		}
+		if d.opcode != scanArrayValue {
+			return ErrPhase
+		}
+	}
+
+	if i < v.Len() {
+		if v.Kind() == reflect.Array {
+			// Array. Zero the rest.
+			z := reflect.Zero(v.Type().Elem())
+			for ; i < v.Len(); i++ {
+				v.Index(i).Set(z)
+			}
+		} else {
+			v.SetLen(i)
+		}
+	}
+	if i == 0 && v.Kind() == reflect.Slice {
+		v.Set(reflect.MakeSlice(v.Type(), 0, 0))
+	}
+	return nil
+}
+
+func setArrayInterface(d *decodeState, v reflect.Value) error {
+	if v.NumMethod() == 0 {
+		// Decoding into nil interface? Switch to non-reflect code.
+		ai := arrayInterface(d)
+		v.Set(reflect.ValueOf(ai))
+		return nil
+	}
+	// Otherwise it's invalid.
+	return &UnmarshalTypeError{Value: "array", Type: v.Type()}
+}
 
 // object consumes an object from d.data[d.off-1:], decoding into v.
 // The first byte ('{') of the object has been read already.
@@ -342,7 +240,7 @@ func object(d *decodeState, v reflect.Value) error {
 			break
 		}
 		if d.opcode != scanBeginLiteral {
-			panic(phasePanicMsg)
+			return ErrPhase
 		}
 
 		// Read key.
@@ -351,7 +249,7 @@ func object(d *decodeState, v reflect.Value) error {
 		item := d.data[start:d.readIndex()]
 		key, ok := unquoteBytes(item)
 		if !ok {
-			panic(phasePanicMsg)
+			return ErrPhase
 		}
 
 		// Figure out field corresponding to key.
@@ -422,21 +320,21 @@ func object(d *decodeState, v reflect.Value) error {
 			d.scanWhile(scanSkipSpace)
 		}
 		if d.opcode != scanObjectKey {
-			panic(phasePanicMsg)
+			return ErrPhase
 		}
 		d.scanWhile(scanSkipSpace)
 
 		if destring {
 			switch d.opcode {
 			default:
-				return errors.New(phasePanicMsg)
+				return ErrPhase
 			case scanBeginArray, scanBeginObject:
 				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal unquoted value into %v", subv.Type())
 			case scanBeginLiteral:
 				v := literalInterface(d)
 				switch qv := v.(type) {
 				case nil:
-					if err := literalStore(nullLiteral, subv, false); err != nil {
+					if err := literalStore([]byte("null"), subv, false); err != nil {
 						return err
 					}
 				case string:
@@ -509,7 +407,7 @@ func object(d *decodeState, v reflect.Value) error {
 			break
 		}
 		if d.opcode != scanObjectValue {
-			panic(phasePanicMsg)
+			return ErrPhase
 		}
 	}
 	return nil
@@ -558,7 +456,7 @@ func literalStore(item []byte, v reflect.Value, fromQuoted bool) error {
 			if fromQuoted {
 				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 			}
-			return errors.New(phasePanicMsg)
+			return ErrPhase
 		}
 		return ut.UnmarshalText(s)
 	}
@@ -591,7 +489,7 @@ func setSampleValue(item []byte, v reflect.Value, fromQuoted bool) error {
 			if fromQuoted {
 				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 			}
-			return errors.New(phasePanicMsg)
+			return ErrPhase
 		}
 		return setString(item, v, s)
 
@@ -601,7 +499,7 @@ func setSampleValue(item []byte, v reflect.Value, fromQuoted bool) error {
 			if fromQuoted {
 				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 			}
-			return errors.New(phasePanicMsg)
+			return ErrPhase
 		}
 		return setNumber(item, v, fromQuoted)
 	}
@@ -753,7 +651,7 @@ func setFloatNumber(v reflect.Value, n float64, s string) error {
 func valueInterface(d *decodeState) (val any) {
 	switch d.opcode {
 	default:
-		panic(phasePanicMsg)
+		return ErrPhase
 	case scanBeginArray:
 		val = arrayInterface(d)
 		d.scanNext()
@@ -786,7 +684,7 @@ func arrayInterface(d *decodeState) []any {
 			break
 		}
 		if d.opcode != scanArrayValue {
-			panic(phasePanicMsg)
+			panic(ErrPhase)
 		}
 	}
 	return v
@@ -803,7 +701,7 @@ func objectInterface(d *decodeState) map[string]any {
 			break
 		}
 		if d.opcode != scanBeginLiteral {
-			panic(phasePanicMsg)
+			panic(ErrPhase)
 		}
 
 		// Read string key.
@@ -812,7 +710,7 @@ func objectInterface(d *decodeState) map[string]any {
 		item := d.data[start:d.readIndex()]
 		key, ok := unquote(item)
 		if !ok {
-			panic(phasePanicMsg)
+			panic(ErrPhase)
 		}
 
 		// Read : before value.
@@ -820,7 +718,7 @@ func objectInterface(d *decodeState) map[string]any {
 			d.scanWhile(scanSkipSpace)
 		}
 		if d.opcode != scanObjectKey {
-			panic(phasePanicMsg)
+			panic(ErrPhase)
 		}
 		d.scanWhile(scanSkipSpace)
 
@@ -835,7 +733,7 @@ func objectInterface(d *decodeState) map[string]any {
 			break
 		}
 		if d.opcode != scanObjectValue {
-			panic(phasePanicMsg)
+			panic(ErrPhase)
 		}
 	}
 	return m
@@ -861,13 +759,13 @@ func literalInterface(d *decodeState) any {
 	case '"': // string
 		s, ok := unquote(item)
 		if !ok {
-			panic(phasePanicMsg)
+			return ErrPhase
 		}
 		return s
 
 	default: // number
 		if c != '-' && (c < '0' || c > '9') {
-			panic(phasePanicMsg)
+			return ErrPhase
 		}
 		n, err := convertNumber(string(item))
 		if err != nil {
