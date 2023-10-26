@@ -158,7 +158,7 @@ func value(d *decodeState, v reflect.Value) error {
 				return err
 			}
 		} else {
-			return &InvalidCloneError{Type: v.Type()}
+			d.skip()
 		}
 		d.scanNext()
 	case scanBeginObject:
@@ -167,7 +167,7 @@ func value(d *decodeState, v reflect.Value) error {
 				return err
 			}
 		} else {
-			return &InvalidCloneError{Type: v.Type()}
+			d.skip()
 		}
 		d.scanNext()
 	case scanBeginLiteral:
