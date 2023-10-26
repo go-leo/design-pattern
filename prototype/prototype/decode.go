@@ -15,10 +15,10 @@ import (
 func Unmarshal(data []byte, tgt any) error {
 	var d decodeState
 	d.init(data)
-	return d.unmarshal(tgt)
+	return unmarshal(&d, tgt)
 }
 
-func (d *decodeState) unmarshal(tgt any) error {
+func unmarshal(d *decodeState, tgt any) error {
 	tgtVal := reflect.ValueOf(tgt)
 	if tgtVal.Kind() != reflect.Pointer || tgtVal.IsNil() {
 		return &InvalidCloneError{Type: reflect.TypeOf(tgt)}
@@ -28,7 +28,7 @@ func (d *decodeState) unmarshal(tgt any) error {
 	d.scanWhile(scanSkipSpace)
 	// We decode tgtVal not tgtVal.Elem because the Unmarshaler interface
 	// test must be applied at the top level of the value.
-	return d.value(tgtVal)
+	return value(d, tgtVal)
 }
 
 // decodeState represents the state while decoding a JSON value.
@@ -153,11 +153,10 @@ Switch:
 // value consumes a JSON value from d.data[d.off-1:], decoding into v, and
 // reads the following byte ahead. If v is invalid, the value is discarded.
 // The first byte of the value has been read already.
-func (d *decodeState) value(v reflect.Value) error {
+func value(d *decodeState, v reflect.Value) error {
 	switch d.opcode {
 	default:
-		panic(phasePanicMsg)
-
+		return errors.New(phasePanicMsg)
 	case scanBeginArray:
 		if v.IsValid() {
 			if err := array(d, v); err != nil {
@@ -167,7 +166,6 @@ func (d *decodeState) value(v reflect.Value) error {
 			return &InvalidCloneError{Type: v.Type()}
 		}
 		d.scanNext()
-
 	case scanBeginObject:
 		if v.IsValid() {
 			if err := object(d, v); err != nil {
@@ -177,7 +175,6 @@ func (d *decodeState) value(v reflect.Value) error {
 			return &InvalidCloneError{Type: v.Type()}
 		}
 		d.scanNext()
-
 	case scanBeginLiteral:
 		// All bytes inside literal return scanContinue op code.
 		start := d.readIndex()
@@ -245,12 +242,12 @@ func array(d *decodeState, v reflect.Value) error {
 
 			if i < v.Len() {
 				// Decode into element.
-				if err := d.value(v.Index(i)); err != nil {
+				if err := value(d, v.Index(i)); err != nil {
 					return err
 				}
 			} else {
 				// Ran out of fixed array: skip.
-				if err := d.value(reflect.Value{}); err != nil {
+				if err := value(d, reflect.Value{}); err != nil {
 					return err
 				}
 			}
@@ -451,10 +448,12 @@ func object(d *decodeState, v reflect.Value) error {
 					if err := literalStore([]byte(qv), subv, true); err != nil {
 						return err
 					}
+				default:
+					return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal unquoted value into %v", subv.Type())
 				}
 			}
 		} else {
-			if err := d.value(subv); err != nil {
+			if err := value(d, subv); err != nil {
 				return err
 			}
 		}
