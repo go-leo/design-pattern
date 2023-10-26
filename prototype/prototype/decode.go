@@ -3,7 +3,6 @@ package prototype
 import (
 	"encoding"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -31,11 +30,6 @@ func unmarshal(d *decodeState, tgt any) error {
 	// test must be applied at the top level of the value.
 	return value(d, tgtVal)
 }
-
-// phasePanicMsg is used as a panic message when we end up with something that
-// shouldn't happen. It can indicate a bug in the JSON decoder, or that
-// something is editing the data slice while the decoder executes.
-var ErrPhase = errors.New("JSON decoder out of sync - data changing underfoot?")
 
 // value consumes a JSON value from d.data[d.off-1:], decoding into v, and
 // reads the following byte ahead. If v is invalid, the value is discarded.

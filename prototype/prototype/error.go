@@ -1,6 +1,14 @@
 package prototype
 
-import "reflect"
+import (
+	"errors"
+	"reflect"
+)
+
+// phasePanicMsg is used as a panic message when we end up with something that
+// shouldn't happen. It can indicate a bug in the JSON decoder, or that
+// something is editing the data slice while the decoder executes.
+var ErrPhase = errors.New("JSON decoder out of sync - data changing underfoot?")
 
 // An UnsupportedTypeError is returned by Clone when attempting
 // to encode an unsupported value type.
