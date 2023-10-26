@@ -48,7 +48,6 @@ func (e *MarshalerError) Unwrap() error { return e.Err }
 type UnmarshalTypeError struct {
 	Value  string       // description of JSON value - "bool", "array", "number -5"
 	Type   reflect.Type // type of Go value it could not be assigned to
-	Offset int64        // error occurred after reading Offset bytes
 	Struct string       // name of the struct type containing the field
 	Field  string       // the full path from root node to the field
 }
