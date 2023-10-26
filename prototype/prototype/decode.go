@@ -14,7 +14,8 @@ import (
 
 func Unmarshal(data []byte, tgt any) error {
 	var d decodeState
-	d.init(data)
+	d.data = data
+	d.off = 0
 	return unmarshal(&d, tgt)
 }
 
@@ -49,12 +50,6 @@ func (d *decodeState) readIndex() int {
 // shouldn't happen. It can indicate a bug in the JSON decoder, or that
 // something is editing the data slice while the decoder executes.
 const phasePanicMsg = "JSON decoder out of sync - data changing underfoot?"
-
-func (d *decodeState) init(data []byte) *decodeState {
-	d.data = data
-	d.off = 0
-	return d
-}
 
 // for reporting at the end of the unmarshal.
 func (d *decodeState) saveError(err error) {
