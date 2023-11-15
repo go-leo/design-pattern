@@ -10,14 +10,12 @@ import (
 // something is editing the data slice while the decoder executes.
 var ErrPhase = errors.New("JSON decoder out of sync - data changing underfoot?")
 
-// An UnsupportedTypeError is returned by Clone when attempting
-// to encode an unsupported value type.
 type UnsupportedTypeError struct {
 	Type reflect.Type
 }
 
 func (e *UnsupportedTypeError) Error() string {
-	return "json: unsupported type: " + e.Type.String()
+	return "prototype: unsupported type: " + e.Type.String()
 }
 
 // An UnsupportedValueError is returned by Clone when attempting
@@ -28,7 +26,7 @@ type UnsupportedValueError struct {
 }
 
 func (e *UnsupportedValueError) Error() string {
-	return "json: unsupported value: " + e.Str
+	return "prototype: unsupported value: " + e.Str
 }
 
 // A MarshalerError represents an error from calling a MarshalJSON or MarshalText method.
@@ -51,35 +49,52 @@ func (e *MarshalerError) Error() string {
 // Unwrap returns the underlying error.
 func (e *MarshalerError) Unwrap() error { return e.Err }
 
-// An UnmarshalTypeError describes a JSON value that was
+type OverflowError struct {
+	FullKeys    []string
+	TargetValue reflect.Value
+	Value       string
+}
+
+func (e *OverflowError) Error() string {
+	return "prototype: overflow error, cannot Clone " + e.Value + " into Go value of type " + e.TargetValue.Type().String()
+}
+
+type NegativeNumberError struct {
+	FullKeys    []string
+	TargetValue reflect.Value
+	Value       string
+}
+
+func (e *NegativeNumberError) Error() string {
+	return "prototype: negative number error, cannot Clone " + e.Value + " into Go value of type " + e.TargetValue.Type().String()
+}
+
+// An CloneError describes a JSON value that was
 // not appropriate for a value of a specific Go type.
-type UnmarshalTypeError struct {
-	Value  string       // description of JSON value - "bool", "array", "number -5"
-	Type   reflect.Type // type of Go value it could not be assigned to
-	Struct string       // name of the struct type containing the field
-	Field  string       // the full path from root node to the field
+type CloneError struct {
+	TargetValue reflect.Value
+	SourceValue reflect.Value
+
+	Value string       // description of JSON value - "bool", "array", "number -5"
+	Type  reflect.Type // type of Go value it could not be assigned to
 }
 
-func (e *UnmarshalTypeError) Error() string {
-	if e.Struct != "" || e.Field != "" {
-		return "json: cannot unmarshal " + e.Value + " into Go struct field " + e.Struct + "." + e.Field + " of type " + e.Type.String()
-	}
-	return "json: cannot unmarshal " + e.Value + " into Go value of type " + e.Type.String()
+func (e *CloneError) Error() string {
+	return "prototype: cannot Clone " + e.Value + " into Go value of type " + e.Type.String()
 }
 
-// An InvalidCloneError describes an invalid argument passed to Clone.
+// An InvalidTargetError describes an invalid argument passed to Clone.
 // (The target argument to Clone must be a non-nil pointer.)
-type InvalidCloneError struct {
+type InvalidTargetError struct {
 	Type reflect.Type
 }
 
-func (e *InvalidCloneError) Error() string {
+func (e *InvalidTargetError) Error() string {
 	if e.Type == nil {
 		return "prototype: Clone(nil, src)"
 	}
-
 	if e.Type.Kind() != reflect.Pointer {
-		return "json: Clone(non-pointer " + e.Type.String() + ", src)"
+		return "prototype: Clone(non-pointer " + e.Type.String() + ", src)"
 	}
 	return "prototype: Clone(nil " + e.Type.String() + ", src)"
 }

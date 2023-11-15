@@ -4,7 +4,7 @@ import "sync"
 
 const startDetectingCyclesAfter = 1000
 
-type cloneState struct {
+type cloneContext struct {
 	// Keep track of what pointers we've seen in the current recursive call
 	// path, to avoid cycles that could lead to a stack overflow. Only do
 	// the relatively expensive map operations if ptrLevel is larger than
@@ -14,43 +14,43 @@ type cloneState struct {
 	ptrSeen  map[any]struct{}
 }
 
-func (e *cloneState) forward() {
+func (e *cloneContext) forward() {
 	e.ptrLevel++
 }
 
-func (e *cloneState) back() {
+func (e *cloneContext) back() {
 	e.ptrLevel--
 }
 
-func (e *cloneState) isTooDeep() bool {
+func (e *cloneContext) isTooDeep() bool {
 	return e.ptrLevel > startDetectingCyclesAfter
 }
 
-func (e *cloneState) isSeen(ptr any) bool {
+func (e *cloneContext) isSeen(ptr any) bool {
 	_, ok := e.ptrSeen[ptr]
 	return ok
 }
 
-func (e *cloneState) remember(ptr any) {
+func (e *cloneContext) remember(ptr any) {
 	e.ptrSeen[ptr] = struct{}{}
 }
 
-func (e *cloneState) forget(ptr any) {
+func (e *cloneContext) forget(ptr any) {
 	delete(e.ptrSeen, ptr)
 }
 
-var cloneStatePool sync.Pool
+var cloneContextPool sync.Pool
 
-func newCloneState() *cloneState {
-	if v := cloneStatePool.Get(); v != nil {
-		e := v.(*cloneState)
+func newCloneContext() *cloneContext {
+	if v := cloneContextPool.Get(); v != nil {
+		e := v.(*cloneContext)
 		if len(e.ptrSeen) > 0 {
-			panic("ptrEncoder.encode should have emptied ptrSeen via defers")
+			panic("ptrCloner.encode should have emptied ptrSeen via defers")
 		}
 		e.ptrLevel = 0
 		return e
 	}
-	return &cloneState{ptrSeen: make(map[any]struct{})}
+	return &cloneContext{ptrSeen: make(map[any]struct{})}
 }
 
 // ==============================================================================================================================

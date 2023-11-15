@@ -3,7 +3,7 @@ module github.com/go-leo/design-pattern
 go 1.20
 
 require (
-	github.com/go-leo/gox v0.0.0-20231016124025-1eb0bc583b8a
+	github.com/go-leo/gox v0.0.0-20231110101712-f754b978b795
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/tools v0.13.0
 	google.golang.org/grpc v1.58.0

@@ -1,9 +1,9 @@
 package prototype
 
 import (
-	"encoding"
 	"encoding/base64"
 	"fmt"
+	"github.com/go-leo/gox/stringx"
 	"reflect"
 	"strconv"
 	"unicode"
@@ -11,36 +11,36 @@ import (
 	"unicode/utf8"
 )
 
-func Unmarshal(data []byte, tgt any) error {
+func Unmarshal(data []byte, tgt any, opts *options) error {
 	var d decodeState
 	d.data = data
 	d.off = 0
-	return unmarshal(&d, tgt)
+	return unmarshal(&d, tgt, opts)
 }
 
-func unmarshal(d *decodeState, tgt any) error {
+func unmarshal(d *decodeState, tgt any, opts *options) error {
 	tgtVal := reflect.ValueOf(tgt)
 	if tgtVal.Kind() != reflect.Pointer || tgtVal.IsNil() {
-		return &InvalidCloneError{Type: reflect.TypeOf(tgt)}
+		return &InvalidTargetError{Type: reflect.TypeOf(tgt)}
 	}
 
 	d.scan.reset()
 	d.scanWhile(scanSkipSpace)
 	// We decode tgtVal not tgtVal.Elem because the Unmarshaler interface
 	// test must be applied at the top level of the value.
-	return value(d, tgtVal)
+	return value(d, tgtVal, opts)
 }
 
 // value consumes a JSON value from d.data[d.off-1:], decoding into v, and
 // reads the following byte ahead. If v is invalid, the value is discarded.
 // The first byte of the value has been read already.
-func value(d *decodeState, v reflect.Value) error {
+func value(d *decodeState, v reflect.Value, opts *options) error {
 	switch d.opcode {
 	default:
 		return ErrPhase
 	case scanBeginArray:
 		if v.IsValid() {
-			if err := array(d, v); err != nil {
+			if err := array(d, v, opts); err != nil {
 				return err
 			}
 		} else {
@@ -49,7 +49,7 @@ func value(d *decodeState, v reflect.Value) error {
 		d.scanNext()
 	case scanBeginObject:
 		if v.IsValid() {
-			if err := object(d, v); err != nil {
+			if err := object(d, v, opts); err != nil {
 				return err
 			}
 		} else {
@@ -73,29 +73,21 @@ func value(d *decodeState, v reflect.Value) error {
 
 // array consumes an array from d.data[d.off-1:], decoding into v.
 // The first byte of the array ('[') has been read already.
-func array(d *decodeState, v reflect.Value) error {
-	if !v.IsValid() {
-		return &InvalidCloneError{Type: v.Type()}
-	}
+func array(d *decodeState, v reflect.Value, opts *options) error {
 	// Check for unmarshaler.
-	ut, pv := indirect(v, false)
-	if ut != nil {
-		return &UnmarshalTypeError{Value: "array", Type: v.Type()}
-	}
-	v = pv
-
+	v = indirect(v, false)
 	// Check type of target.
 	switch v.Kind() {
 	case reflect.Interface:
 		return setArrayInterface(d, v)
 	case reflect.Array, reflect.Slice:
-		return setArrayOrSlice(d, v)
+		return setArrayOrSlice(d, v, opts)
 	default:
-		return &UnmarshalTypeError{Value: "array", Type: v.Type()}
+		return &CloneError{Value: "array", Type: v.Type()}
 	}
 }
 
-func setArrayOrSlice(d *decodeState, v reflect.Value) error {
+func setArrayOrSlice(d *decodeState, tv reflect.Value, opts *options) error {
 	i := 0
 	for {
 		// Look ahead for ] - can only happen on first iteration.
@@ -105,30 +97,30 @@ func setArrayOrSlice(d *decodeState, v reflect.Value) error {
 		}
 
 		// Get element of array, growing if necessary.
-		if v.Kind() == reflect.Slice {
+		if tv.Kind() == reflect.Slice {
 			// Grow slice if necessary
-			if i >= v.Cap() {
-				newcap := v.Cap() + v.Cap()/2
+			if i >= tv.Cap() {
+				newcap := tv.Cap() + tv.Cap()/2
 				if newcap < 4 {
 					newcap = 4
 				}
-				newv := reflect.MakeSlice(v.Type(), v.Len(), newcap)
-				reflect.Copy(newv, v)
-				v.Set(newv)
+				newv := reflect.MakeSlice(tv.Type(), tv.Len(), newcap)
+				reflect.Copy(newv, tv)
+				tv.Set(newv)
 			}
-			if i >= v.Len() {
-				v.SetLen(i + 1)
+			if i >= tv.Len() {
+				tv.SetLen(i + 1)
 			}
 		}
 
-		if i < v.Len() {
+		if i < tv.Len() {
 			// Decode into element.
-			if err := value(d, v.Index(i)); err != nil {
+			if err := value(d, tv.Index(i), opts); err != nil {
 				return err
 			}
 		} else {
 			// Ran out of fixed array: skip.
-			if err := value(d, reflect.Value{}); err != nil {
+			if err := value(d, reflect.Value{}, opts); err != nil {
 				return err
 			}
 		}
@@ -146,19 +138,19 @@ func setArrayOrSlice(d *decodeState, v reflect.Value) error {
 		}
 	}
 
-	if i < v.Len() {
-		if v.Kind() == reflect.Array {
+	if i < tv.Len() {
+		if tv.Kind() == reflect.Array {
 			// Array. Zero the rest.
-			z := reflect.Zero(v.Type().Elem())
-			for ; i < v.Len(); i++ {
-				v.Index(i).Set(z)
+			z := reflect.Zero(tv.Type().Elem())
+			for ; i < tv.Len(); i++ {
+				tv.Index(i).Set(z)
 			}
 		} else {
-			v.SetLen(i)
+			tv.SetLen(i)
 		}
 	}
-	if i == 0 && v.Kind() == reflect.Slice {
-		v.Set(reflect.MakeSlice(v.Type(), 0, 0))
+	if i == 0 && tv.Kind() == reflect.Slice {
+		tv.Set(reflect.MakeSlice(tv.Type(), 0, 0))
 	}
 	return nil
 }
@@ -174,30 +166,22 @@ func setArrayInterface(d *decodeState, v reflect.Value) error {
 		return nil
 	}
 	// Otherwise it's invalid.
-	return &UnmarshalTypeError{Value: "array", Type: v.Type()}
+	return &CloneError{Value: "array", Type: v.Type()}
 }
 
 // object consumes an object from d.data[d.off-1:], decoding into v.
 // The first byte ('{') of the object has been read already.
-func object(d *decodeState, v reflect.Value) error {
-	if !v.IsValid() {
-		return &InvalidCloneError{Type: v.Type()}
-	}
-	// Check for unmarshaler.
-	ut, pv := indirect(v, false)
-	if ut != nil {
-		return &UnmarshalTypeError{Value: "object", Type: v.Type()}
-	}
-	v = pv
-	t := v.Type()
+func object(d *decodeState, tgtVal reflect.Value, opts *options) error {
+	tgtVal = indirect(tgtVal, false)
+	t := tgtVal.Type()
 
 	// Decoding into nil interface? Switch to non-reflect code.
-	if v.Kind() == reflect.Interface && v.NumMethod() == 0 {
+	if tgtVal.Kind() == reflect.Interface && tgtVal.NumMethod() == 0 {
 		oi, err := objectInterface(d)
 		if err != nil {
 			return err
 		}
-		v.Set(reflect.ValueOf(oi))
+		tgtVal.Set(reflect.ValueOf(oi))
 		return nil
 	}
 
@@ -207,7 +191,7 @@ func object(d *decodeState, v reflect.Value) error {
 	//   struct or
 	//   map[T1]T2 where T1 is string, an integer type,
 	//             or an encoding.TextUnmarshaler
-	switch v.Kind() {
+	switch tgtVal.Kind() {
 	case reflect.Map:
 		// Map key must either have string kind, have an integer kind,
 		// or be an encoding.TextUnmarshaler.
@@ -217,17 +201,17 @@ func object(d *decodeState, v reflect.Value) error {
 			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		default:
 			if !reflect.PointerTo(t.Key()).Implements(textUnmarshalerType) {
-				return &UnmarshalTypeError{Value: "object", Type: t}
+				return &CloneError{Value: "object", Type: t}
 			}
 		}
-		if v.IsNil() {
-			v.Set(reflect.MakeMap(t))
+		if tgtVal.IsNil() {
+			tgtVal.Set(reflect.MakeMap(t))
 		}
 	case reflect.Struct:
-		fields = cachedTypeFields(t)
+		fields = cachedTypeFields(t, opts, false)
 		// ok
 	default:
-		return &UnmarshalTypeError{Value: "object", Type: t}
+		return &CloneError{Value: "object", Type: t}
 	}
 
 	var mapElem reflect.Value
@@ -254,9 +238,8 @@ func object(d *decodeState, v reflect.Value) error {
 
 		// Figure out field corresponding to key.
 		var subv reflect.Value
-		destring := false // whether the value is wrapped in a string to be decoded first
 
-		if v.Kind() == reflect.Map {
+		if tgtVal.Kind() == reflect.Map {
 			elemType := t.Elem()
 			if !mapElem.IsValid() {
 				mapElem = reflect.New(elemType).Elem()
@@ -265,25 +248,24 @@ func object(d *decodeState, v reflect.Value) error {
 			}
 			subv = mapElem
 		} else {
-			var f *field
+			var tgtField *field
 			if i, ok := fields.nameIndex[string(key)]; ok {
-				// Found an exact name match.
-				f = &fields.list[i]
+				// Found an exact Nil match.
+				tgtField = &fields.list[i]
 			} else {
 				// Fall back to the expensive case-insensitive
 				// linear search.
 				for i := range fields.list {
 					ff := &fields.list[i]
 					if ff.equalFold(ff.nameBytes, key) {
-						f = ff
+						tgtField = ff
 						break
 					}
 				}
 			}
-			if f != nil {
-				subv = v
-				destring = f.quoted
-				for _, i := range f.index {
+			if tgtField != nil {
+				subv = tgtVal
+				for _, i := range tgtField.index {
 					if subv.Kind() == reflect.Pointer {
 						if subv.IsNil() {
 							// If a struct embeds a pointer to an unexported type,
@@ -296,7 +278,6 @@ func object(d *decodeState, v reflect.Value) error {
 								// Invalidate subv to ensure d.value(subv) skips over
 								// the JSON value without assigning it to subv.
 								subv = reflect.Value{}
-								destring = false
 								break
 							}
 							subv.Set(reflect.New(subv.Type().Elem()))
@@ -305,11 +286,6 @@ func object(d *decodeState, v reflect.Value) error {
 					}
 					subv = subv.Field(i)
 				}
-				//if d.errorContext == nil {
-				//	d.errorContext = new(errorContext)
-				//}
-				//d.errorContext.FieldStack = append(d.errorContext.FieldStack, f.name)
-				//d.errorContext.Struct = t
 			} else if d.disallowUnknownFields {
 				d.saveError(fmt.Errorf("json: unknown field %q", key))
 			}
@@ -324,39 +300,13 @@ func object(d *decodeState, v reflect.Value) error {
 		}
 		d.scanWhile(scanSkipSpace)
 
-		if destring {
-			switch d.opcode {
-			default:
-				return ErrPhase
-			case scanBeginArray, scanBeginObject:
-				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal unquoted value into %v", subv.Type())
-			case scanBeginLiteral:
-				v, err := literalInterface(d)
-				if err != nil {
-					return err
-				}
-				switch qv := v.(type) {
-				case nil:
-					if err := literalStore([]byte("null"), subv, false); err != nil {
-						return err
-					}
-				case string:
-					if err := literalStore([]byte(qv), subv, true); err != nil {
-						return err
-					}
-				default:
-					return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal unquoted value into %v", subv.Type())
-				}
-			}
-		} else {
-			if err := value(d, subv); err != nil {
-				return err
-			}
+		if err := value(d, subv, opts); err != nil {
+			return err
 		}
 
 		// Write value back to map;
 		// if using struct, subv points into struct already.
-		if v.Kind() == reflect.Map {
+		if tgtVal.Kind() == reflect.Map {
 			kt := t.Key()
 			var kv reflect.Value
 			switch {
@@ -374,7 +324,7 @@ func object(d *decodeState, v reflect.Value) error {
 					s := string(key)
 					n, err := strconv.ParseInt(s, 10, 64)
 					if err != nil || reflect.Zero(kt).OverflowInt(n) {
-						d.saveError(&UnmarshalTypeError{Value: "number " + s, Type: kt})
+						d.saveError(&CloneError{Value: "number " + s, Type: kt})
 						break
 					}
 					kv = reflect.ValueOf(n).Convert(kt)
@@ -382,7 +332,7 @@ func object(d *decodeState, v reflect.Value) error {
 					s := string(key)
 					n, err := strconv.ParseUint(s, 10, 64)
 					if err != nil || reflect.Zero(kt).OverflowUint(n) {
-						d.saveError(&UnmarshalTypeError{Value: "number " + s, Type: kt})
+						d.saveError(&CloneError{Value: "number " + s, Type: kt})
 						break
 					}
 					kv = reflect.ValueOf(n).Convert(kt)
@@ -391,7 +341,7 @@ func object(d *decodeState, v reflect.Value) error {
 				}
 			}
 			if kv.IsValid() {
-				v.SetMapIndex(kv, subv)
+				tgtVal.SetMapIndex(kv, subv)
 			}
 		}
 
@@ -421,7 +371,7 @@ func object(d *decodeState, v reflect.Value) error {
 func convertNumber(s string) (any, error) {
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		return nil, &UnmarshalTypeError{Value: "number " + s, Type: reflect.TypeOf(0.0)}
+		return nil, &CloneError{Value: "number " + s, Type: reflect.TypeOf(0.0)}
 	}
 	return f, nil
 }
@@ -432,37 +382,11 @@ func convertNumber(s string) (any, error) {
 // string from the ",string" struct tag option. this is used only to
 // produce more helpful error messages.
 func literalStore(item []byte, v reflect.Value, fromQuoted bool) error {
-	if !v.IsValid() {
-		return &InvalidCloneError{Type: v.Type()}
-	}
 	if len(item) == 0 {
 		return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 	}
 	isNull := item[0] == 'n' // null
-	ut, pv := indirect(v, isNull)
-	if ut != nil {
-		if item[0] != '"' {
-			if fromQuoted {
-				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
-			}
-			val := "number"
-			switch item[0] {
-			case 'n':
-				val = "null"
-			case 't', 'f':
-				val = "bool"
-			}
-			return &UnmarshalTypeError{Value: val, Type: v.Type()}
-		}
-		s, ok := unquoteBytes(item)
-		if !ok {
-			if fromQuoted {
-				return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
-			}
-			return ErrPhase
-		}
-		return ut.UnmarshalText(s)
-	}
+	pv := indirect(v, isNull)
 	return setSampleValue(item, pv, fromQuoted)
 }
 
@@ -504,39 +428,36 @@ func setSampleValue(item []byte, v reflect.Value, fromQuoted bool) error {
 			}
 			return ErrPhase
 		}
-		return setNumber(item, v, fromQuoted)
+		return setNumber(item, v)
 	}
 }
 
-func setNumber(item []byte, v reflect.Value, fromQuoted bool) error {
+func setNumber(item []byte, v reflect.Value) error {
 	s := string(item)
 	switch v.Kind() {
 	default:
 		if setTypeNumber(v, s) {
 			return nil
 		}
-		if fromQuoted {
-			return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
-		}
-		return &UnmarshalTypeError{Value: "number", Type: v.Type()}
+		return &CloneError{Value: "number", Type: v.Type()}
 	case reflect.Interface:
 		return setInterfaceNumber(v, s)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		n, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
-			return &UnmarshalTypeError{Value: "number " + s, Type: v.Type()}
+			return &CloneError{Value: "number " + s, Type: v.Type()}
 		}
 		return setIntNumber(v, n, s)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		n, err := strconv.ParseUint(s, 10, 64)
 		if err != nil {
-			return &UnmarshalTypeError{Value: "number " + s, Type: v.Type()}
+			return &CloneError{Value: "number " + s, Type: v.Type()}
 		}
 		return setUintNumber(v, n, s)
 	case reflect.Float32, reflect.Float64:
 		n, err := strconv.ParseFloat(s, v.Type().Bits())
 		if err != nil {
-			return &UnmarshalTypeError{Value: "number " + s, Type: v.Type()}
+			return &CloneError{Value: "number " + s, Type: v.Type()}
 		}
 		return setFloatNumber(v, n, s)
 	}
@@ -545,10 +466,10 @@ func setNumber(item []byte, v reflect.Value, fromQuoted bool) error {
 func setString(item []byte, v reflect.Value, s []byte) error {
 	switch v.Kind() {
 	default:
-		return &UnmarshalTypeError{Value: "string", Type: v.Type()}
+		return &CloneError{Value: "string", Type: v.Type()}
 	case reflect.Slice:
 		if v.Type().Elem().Kind() != reflect.Uint8 {
-			return &UnmarshalTypeError{Value: "string", Type: v.Type()}
+			return &CloneError{Value: "string", Type: v.Type()}
 		}
 		b := make([]byte, base64.StdEncoding.DecodedLen(len(s)))
 		n, err := base64.StdEncoding.Decode(b, s)
@@ -557,7 +478,7 @@ func setString(item []byte, v reflect.Value, s []byte) error {
 		}
 		v.SetBytes(b[:n])
 	case reflect.String:
-		if v.Type() == numberType && !isValidNumber(string(s)) {
+		if v.Type() == numberType && !stringx.IsValidNumber(string(s)) {
 			return fmt.Errorf("json: invalid number literal, trying to unmarshal %q into Number", item)
 		}
 		v.SetString(string(s))
@@ -565,7 +486,7 @@ func setString(item []byte, v reflect.Value, s []byte) error {
 		if v.NumMethod() == 0 {
 			v.Set(reflect.ValueOf(string(s)))
 		} else {
-			return &UnmarshalTypeError{Value: "string", Type: v.Type()}
+			return &CloneError{Value: "string", Type: v.Type()}
 		}
 	}
 	return nil
@@ -577,7 +498,7 @@ func setBool(item []byte, v reflect.Value, fromQuoted bool, value bool) error {
 		if fromQuoted {
 			return fmt.Errorf("json: invalid use of ,string struct tag, trying to unmarshal %q into %v", item, v.Type())
 		} else {
-			return &UnmarshalTypeError{Value: "bool", Type: v.Type()}
+			return &CloneError{Value: "bool", Type: v.Type()}
 		}
 	case reflect.Bool:
 		v.SetBool(value)
@@ -585,7 +506,7 @@ func setBool(item []byte, v reflect.Value, fromQuoted bool, value bool) error {
 		if v.NumMethod() == 0 {
 			v.Set(reflect.ValueOf(value))
 		} else {
-			return &UnmarshalTypeError{Value: "bool", Type: v.Type()}
+			return &CloneError{Value: "bool", Type: v.Type()}
 		}
 	}
 	return nil
@@ -595,7 +516,7 @@ func setNil(v reflect.Value) error {
 	switch v.Kind() {
 	case reflect.Interface, reflect.Pointer, reflect.Map, reflect.Slice:
 		v.Set(reflect.Zero(v.Type()))
-		// otherwise, ignore null for primitives/string
+		// otherwise, ignore nil for primitives/string
 	}
 	return nil
 }
@@ -616,7 +537,7 @@ func setInterfaceNumber(v reflect.Value, s string) error {
 		return err
 	}
 	if v.NumMethod() != 0 {
-		return &UnmarshalTypeError{Value: "number", Type: v.Type()}
+		return &CloneError{Value: "number", Type: v.Type()}
 	}
 	v.Set(reflect.ValueOf(n))
 	return nil
@@ -624,7 +545,7 @@ func setInterfaceNumber(v reflect.Value, s string) error {
 
 func setIntNumber(v reflect.Value, n int64, s string) error {
 	if v.OverflowInt(n) {
-		return &UnmarshalTypeError{Value: "number " + s, Type: v.Type()}
+		return &CloneError{Value: "number " + s, Type: v.Type()}
 	}
 	v.SetInt(n)
 	return nil
@@ -632,7 +553,7 @@ func setIntNumber(v reflect.Value, n int64, s string) error {
 
 func setUintNumber(v reflect.Value, n uint64, s string) error {
 	if v.OverflowUint(n) {
-		return &UnmarshalTypeError{Value: "number " + s, Type: v.Type()}
+		return &CloneError{Value: "number " + s, Type: v.Type()}
 	}
 	v.SetUint(n)
 	return nil
@@ -640,7 +561,7 @@ func setUintNumber(v reflect.Value, n uint64, s string) error {
 
 func setFloatNumber(v reflect.Value, n float64, s string) error {
 	if v.OverflowFloat(n) {
-		return &UnmarshalTypeError{Value: "number " + s, Type: v.Type()}
+		return &CloneError{Value: "number " + s, Type: v.Type()}
 	}
 	v.SetFloat(n)
 	return nil
@@ -934,10 +855,9 @@ func unquoteBytes(s []byte) (t []byte, ok bool) {
 
 // indirect walks down v allocating pointers as needed,
 // until it gets to a non-pointer.
-// If it encounters an Unmarshaler, indirect stops and returns that.
-// If decodingNull is true, indirect stops at the first settable pointer so it
+// If isNil is true, indirect stops at the first settable pointer so it
 // can be set to nil.
-func indirect(v reflect.Value, decodingNull bool) (encoding.TextUnmarshaler, reflect.Value) {
+func indirect(v reflect.Value, isNil bool) reflect.Value {
 	// Issue #24153 indicates that it is generally not a guaranteed property
 	// that you may round-trip a reflect.Value by calling Value.Addr().Elem()
 	// and expect the value to still be settable for values derived from
@@ -964,7 +884,7 @@ func indirect(v reflect.Value, decodingNull bool) (encoding.TextUnmarshaler, ref
 		// usefully addressable.
 		if v.Kind() == reflect.Interface && !v.IsNil() {
 			e := v.Elem()
-			if e.Kind() == reflect.Pointer && !e.IsNil() && (!decodingNull || e.Elem().Kind() == reflect.Pointer) {
+			if e.Kind() == reflect.Pointer && !e.IsNil() && (!isNil || e.Elem().Kind() == reflect.Pointer) {
 				haveAddr = false
 				v = e
 				continue
@@ -975,7 +895,7 @@ func indirect(v reflect.Value, decodingNull bool) (encoding.TextUnmarshaler, ref
 			break
 		}
 
-		if decodingNull && v.CanSet() {
+		if isNil && v.CanSet() {
 			break
 		}
 
@@ -989,13 +909,6 @@ func indirect(v reflect.Value, decodingNull bool) (encoding.TextUnmarshaler, ref
 		if v.IsNil() {
 			v.Set(reflect.New(v.Type().Elem()))
 		}
-		if v.Type().NumMethod() > 0 && v.CanInterface() {
-			if !decodingNull {
-				if u, ok := v.Interface().(encoding.TextUnmarshaler); ok {
-					return u, reflect.Value{}
-				}
-			}
-		}
 
 		if haveAddr {
 			v = v0 // restore original value after round-trip Value.Addr().Elem()
@@ -1004,5 +917,5 @@ func indirect(v reflect.Value, decodingNull bool) (encoding.TextUnmarshaler, ref
 			v = v.Elem()
 		}
 	}
-	return nil, v
+	return v
 }

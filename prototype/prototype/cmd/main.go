@@ -36,6 +36,7 @@ func main() {
 		Model      string
 		ColorGroup ColorGroup
 		Materials  map[string]string
+		Other      map[string]any
 	}
 
 	toy := Toy{
@@ -57,6 +58,7 @@ func main() {
 		fmt.Println("error:", err)
 	}
 
+	fmt.Println(clonedToy)
 }
 
 func Unsupported() {

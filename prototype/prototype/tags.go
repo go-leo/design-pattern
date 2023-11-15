@@ -12,7 +12,7 @@ import (
 // tag, or the empty string. It does not include the leading comma.
 type tagOptions string
 
-// parseTag splits a struct field's json tag into its name and
+// parseTag splits a struct field's json tag into its Nil and
 // comma-separated options.
 func parseTag(tag string) (string, tagOptions) {
 	tag, opt, _ := strings.Cut(tag, ",")
