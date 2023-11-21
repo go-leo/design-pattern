@@ -536,11 +536,17 @@ func (w *reflectWithString) resolve() error {
 	panic("unexpected map key type")
 }
 
-type mapEncoder struct {
-	elemEnc ClonerFunc
-}
-
-func (me mapEncoder) encode(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	srcType := srcVal.Type()
+	switch srcType.Key().Kind() {
+	case reflect.String,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+	default:
+		if !srcType.Key().Implements(textMarshalerType) {
+			return hookCloner(e, fks, tgtVal, srcVal, opts)
+		}
+	}
 	if srcVal.IsNil() {
 		return emptyValueCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -567,8 +573,9 @@ func (me mapEncoder) encode(e *cloneContext, fks []string, tgtVal, srcVal reflec
 	}
 	sort.Slice(sv, func(i, j int) bool { return sv[i].ks < sv[j].ks })
 
+	cloner := typeCloner(srcType.Elem(), opts)
 	for _, kv := range sv {
-		if err := me.elemEnc(e, append(slices.Clone(fks), kv.ks), tgtVal, kv.v, opts); err != nil {
+		if err := cloner(e, append(slices.Clone(fks), kv.ks), tgtVal, kv.v, opts); err != nil {
 			return err
 		}
 	}
@@ -576,31 +583,8 @@ func (me mapEncoder) encode(e *cloneContext, fks []string, tgtVal, srcVal reflec
 	return nil
 }
 
-func newMapCloner(srcType reflect.Type, opts *options) ClonerFunc {
-	switch srcType.Key().Kind() {
-	case reflect.String,
-		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-	default:
-		if !srcType.Key().Implements(textMarshalerType) {
-			return unsupportedTypeCloner
-		}
-	}
-	me := mapEncoder{elemEnc: typeCloner(srcType.Elem(), opts)}
-	return me.encode
-}
-
 // sliceCloner just wraps an arrayCloner, checking to make sure the value isn't nil.
-type sliceCloner struct {
-	arrayCloner ClonerFunc
-}
-
-func newSliceCloner(srcType reflect.Type, opts *options) ClonerFunc {
-	enc := sliceCloner{arrayCloner: newArrayCloner(srcType, opts)}
-	return enc.clone
-}
-
-func (se sliceCloner) clone(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func sliceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
@@ -622,23 +606,14 @@ func (se sliceCloner) clone(e *cloneContext, fks []string, tgtVal, srcVal reflec
 		e.remember(ptr)
 		defer e.forget(ptr)
 	}
-	if err := se.arrayCloner(e, fks, tgtVal, srcVal, opts); err != nil {
+	if err := arrayCloner(e, fks, tgtVal, srcVal, opts); err != nil {
 		return err
 	}
 	e.back()
 	return nil
 }
 
-type arrayCloner struct {
-	elemEnc ClonerFunc
-}
-
-func newArrayCloner(srcType reflect.Type, opts *options) ClonerFunc {
-	enc := arrayCloner{elemEnc: typeCloner(srcType.Elem(), opts)}
-	return enc.encode
-}
-
-func (ae arrayCloner) encode(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
@@ -650,6 +625,7 @@ func (ae arrayCloner) encode(e *cloneContext, fks []string, tgtVal, srcVal refle
 			tv.Set(reflect.MakeSlice(tv.Type(), srcLen, srcLen))
 			tv.SetLen(0)
 		}
+		elemEnc := typeCloner(tgtVal.Type().Elem(), opts)
 		for i := 0; i < srcVal.Len(); i++ {
 			if tv.Kind() == reflect.Slice {
 				tv.SetLen(i + 1)
@@ -660,7 +636,7 @@ func (ae arrayCloner) encode(e *cloneContext, fks []string, tgtVal, srcVal refle
 			}
 			tgtItem := tv.Index(i)
 			srcItem := srcVal.Index(i)
-			if err := ae.elemEnc(e, append(slices.Clone(fks), convx.ToString(i)), tgtItem, srcItem, opts); err != nil {
+			if err := elemEnc(e, append(slices.Clone(fks), convx.ToString(i)), tgtItem, srcItem, opts); err != nil {
 				return err
 			}
 			tv.Index(i).Set(tgtItem)
@@ -670,13 +646,14 @@ func (ae arrayCloner) encode(e *cloneContext, fks []string, tgtVal, srcVal refle
 		if tv.NumMethod() > 0 {
 			return hookCloner(e, fks, tgtVal, srcVal, opts)
 		}
-		return ae.anySliceClone(e, fks, tv, srcVal, opts)
+		return anySliceClone(e, fks, tv, srcVal, opts)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
-func (ae arrayCloner) anySliceClone(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func anySliceClone(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	elemEnc := typeCloner(tgtVal.Type().Elem(), opts)
 	srcLen := srcVal.Len()
 	// 获取src的反射类型
 	srcType := srcVal.Type()
@@ -688,7 +665,7 @@ func (ae arrayCloner) anySliceClone(e *cloneContext, fks []string, tgtVal, srcVa
 	for i := 0; i < srcLen; i++ {
 		tgtItem := tgtSlice.Index(i)
 		srcItem := srcVal.Index(i)
-		if err := ae.elemEnc(e, append(slices.Clone(fks), convx.ToString(i)), tgtItem, srcItem, opts); err != nil {
+		if err := elemEnc(e, append(slices.Clone(fks), convx.ToString(i)), tgtItem, srcItem, opts); err != nil {
 			return err
 		}
 		tgtSlice.Index(i).Set(tgtItem)
@@ -698,16 +675,7 @@ func (ae arrayCloner) anySliceClone(e *cloneContext, fks []string, tgtVal, srcVa
 	return nil
 }
 
-type ptrCloner struct {
-	elemEnc ClonerFunc
-}
-
-func newPtrCloner(srcType reflect.Type, opts *options) ClonerFunc {
-	enc := ptrCloner{elemEnc: typeCloner(srcType.Elem(), opts)}
-	return enc.encode
-}
-
-func (pe ptrCloner) encode(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func ptrCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if srcVal.IsNil() {
 		return emptyValueCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -721,7 +689,8 @@ func (pe ptrCloner) encode(e *cloneContext, fks []string, tgtVal, srcVal reflect
 		e.remember(ptr)
 		defer e.forget(ptr)
 	}
-	if err := pe.elemEnc(e, fks, tgtVal, srcVal.Elem(), opts); err != nil {
+	elemEnc := typeCloner(srcVal.Type().Elem(), opts)
+	if err := elemEnc(e, fks, tgtVal, srcVal.Elem(), opts); err != nil {
 		return err
 	}
 	e.back()

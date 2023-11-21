@@ -65,14 +65,14 @@ func typeCloner(srcType reflect.Type, opts *options) ClonerFunc {
 	}
 
 	// Compute the real clonerFunc and replace the indirect func with it.
-	f = newTypeCloner(srcType, opts)
+	f = newTypeCloner(srcType)
 	wg.Done()
 	clonerCache.Store(srcType, f)
 	return f
 }
 
 // newTypeCloner constructs an ClonerFunc for a type.
-func newTypeCloner(srcType reflect.Type, opts *options) ClonerFunc {
+func newTypeCloner(srcType reflect.Type) ClonerFunc {
 	switch srcType.Kind() {
 	case reflect.Bool:
 		return boolCloner
@@ -91,13 +91,13 @@ func newTypeCloner(srcType reflect.Type, opts *options) ClonerFunc {
 	case reflect.Struct:
 		return structCloner
 	case reflect.Map:
-		return newMapCloner(srcType, opts)
+		return mapCloner
 	case reflect.Slice:
-		return newSliceCloner(srcType, opts)
+		return sliceCloner
 	case reflect.Array:
-		return newArrayCloner(srcType, opts)
+		return arrayCloner
 	case reflect.Pointer:
-		return newPtrCloner(srcType, opts)
+		return ptrCloner
 	default:
 		return unsupportedTypeCloner
 	}
