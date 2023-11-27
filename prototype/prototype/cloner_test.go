@@ -595,13 +595,22 @@ func TestStructCloner(t *testing.T) {
 	assert.NoError(t, err)
 	assert.EqualValues(t, tgtFloat64, srcSqlNullFloat.Float64)
 
+	type Error struct {
+		Course string
+		Msg    string
+	}
+
 	type Code struct {
+		*Error
 		Msg  string `json:"msg"`
 		Code int    `json:"code"`
 	}
 
+	type Int int
+
 	type Response struct {
 		Code
+		Int
 		Msg      string `json:"msg"`
 		Username string `json:"username"`
 		IsPass   bool   `json:"is_pass,omitempty"`
@@ -609,6 +618,10 @@ func TestStructCloner(t *testing.T) {
 
 	var srcResponse = Response{
 		Code: Code{
+			Error: &Error{
+				Course: "Course",
+				Msg:    "error msg",
+			},
 			Msg:  "ok",
 			Code: 200,
 		},
@@ -622,6 +635,12 @@ func TestStructCloner(t *testing.T) {
 	assert.NoError(t, err)
 	assert.EqualValues(t, tgtAny, &srcResponse)
 
+	var tgtResp Response
+	tgtVal = reflect.ValueOf(&tgtResp)
+	err = structCloner(new(cloneContext), []string{}, tgtVal, srcVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, &tgtResp, &srcResponse)
+
 }
 
 func TestSliceCloner(t *testing.T) {
@@ -629,34 +648,30 @@ func TestSliceCloner(t *testing.T) {
 
 	var srcBoolSlice = []bool{true, false, false, true}
 	var tgtBoolSlice []bool
-	boolSliceCloner := newSliceCloner(reflect.ValueOf(srcBoolSlice).Type(), new(options))
-	err = boolSliceCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtBoolSlice), reflect.ValueOf(srcBoolSlice), new(options))
+	err = sliceCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtBoolSlice), reflect.ValueOf(srcBoolSlice), new(options))
 	assert.NoError(t, err)
 	assert.EqualValues(t, tgtBoolSlice, srcBoolSlice)
 
 	var srcInt16Slice = []int16{math.MinInt16, math.MinInt8, math.MaxInt8, math.MaxInt16}
 	var tgtInt8Slice []int8
-	int16SliceCloner := newSliceCloner(reflect.ValueOf(srcInt16Slice).Type(), new(options))
-	err = int16SliceCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtInt8Slice), reflect.ValueOf(srcInt16Slice), new(options))
+	err = sliceCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtInt8Slice), reflect.ValueOf(srcInt16Slice), new(options))
 	var ofErr *OverflowError
 	assert.ErrorAs(t, err, &ofErr)
 
 	var tgtInt32Slice []int32
-	err = int16SliceCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtInt32Slice), reflect.ValueOf(srcInt16Slice), new(options))
+	err = sliceCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtInt32Slice), reflect.ValueOf(srcInt16Slice), new(options))
 	assert.NoError(t, err)
 	assert.EqualValues(t, tgtInt32Slice, srcInt16Slice)
 
 	var srcUint16Slice = []uint16{0, math.MaxInt8, math.MaxInt16}
 	var tgtUint32Slice []uint32
-	uint16Cloner := newSliceCloner(reflect.ValueOf(srcUint16Slice).Type(), new(options))
-	err = uint16Cloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtUint32Slice), reflect.ValueOf(srcUint16Slice), new(options))
+	err = sliceCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtUint32Slice), reflect.ValueOf(srcUint16Slice), new(options))
 	assert.NoError(t, err)
 	//assert.Eq(t, tgtUint32Slice, srcUint16Slice)
 
 	var srcStringSlice = []string{"1", "2", "3", "4"}
 	var tgtStringSlice []string
-	stringSliceCloner := newSliceCloner(reflect.ValueOf(srcStringSlice).Type(), new(options))
-	err = stringSliceCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtStringSlice), reflect.ValueOf(srcStringSlice), new(options))
+	err = sliceCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtStringSlice), reflect.ValueOf(srcStringSlice), new(options))
 	assert.NoError(t, err)
 	assert.ObjectsAreEqualValues(tgtStringSlice, srcStringSlice)
 

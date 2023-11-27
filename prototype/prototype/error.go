@@ -50,13 +50,13 @@ func (e *MarshalerError) Error() string {
 func (e *MarshalerError) Unwrap() error { return e.Err }
 
 type OverflowError struct {
-	FullKeys    []string
-	TargetValue reflect.Value
-	Value       string
+	FullKeys   []string
+	TargetType reflect.Type
+	Value      string
 }
 
 func (e *OverflowError) Error() string {
-	return "prototype: overflow error, cannot Clone " + e.Value + " into Go value of type " + e.TargetValue.Type().String()
+	return "prototype: overflow error, cannot Clone " + e.Value + " into Go value of type " + e.TargetType.String()
 }
 
 type NegativeNumberError struct {
@@ -83,8 +83,6 @@ func (e *CloneError) Error() string {
 	return "prototype: cannot Clone " + e.Value + " into Go value of type " + e.Type.String()
 }
 
-// An InvalidTargetError describes an invalid argument passed to Clone.
-// (The target argument to Clone must be a non-nil pointer.)
 type InvalidTargetError struct {
 	Type reflect.Type
 }
@@ -92,6 +90,20 @@ type InvalidTargetError struct {
 func (e *InvalidTargetError) Error() string {
 	if e.Type == nil {
 		return "prototype: Clone(nil, src)"
+	}
+	if e.Type.Kind() != reflect.Pointer {
+		return "prototype: Clone(non-pointer " + e.Type.String() + ", src)"
+	}
+	return "prototype: Clone(nil " + e.Type.String() + ", src)"
+}
+
+type InvalidSourceError struct {
+	Type reflect.Type
+}
+
+func (e *InvalidSourceError) Error() string {
+	if e.Type == nil {
+		return "prototype: Clone(tgt, nil)"
 	}
 	if e.Type.Kind() != reflect.Pointer {
 		return "prototype: Clone(non-pointer " + e.Type.String() + ", src)"

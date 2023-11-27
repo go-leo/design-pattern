@@ -1,10 +1,10 @@
 package prototype
 
 import (
+	"fmt"
 	"github.com/go-leo/gox/stringx"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"unicode"
@@ -19,13 +19,17 @@ type field struct {
 	index      []int
 	typ        reflect.Type
 	clonerFunc ClonerFunc
+	fullName   string
 }
 
 type structFields struct {
-	// list 是一个字段列表，存储了结构体的字段信息
-	list []field
-	// nameIndex 是一个映射，用于通过字段名称查找字段在 list 中的索引
-	nameIndex map[string]int
+	// dominants 是一个字段列表，存储了结构体的主要字段信息
+	dominants []field
+	// dominantsNameIndex 是一个映射，用于通过字段名称查找字段在 dominants 中的索引
+	dominantsNameIndex      map[string]int
+	recessives              []field
+	recessivesNameIndex     map[string][]int
+	recessivesFullNameIndex map[string]int
 }
 
 // byIndex sorts field by index sequence.
@@ -47,31 +51,15 @@ func (x byIndex) Less(i, j int) bool {
 	return len(x[i].index) < len(x[j].index)
 }
 
-// dominantField looks through the fields, all of which are known to
-// have the same Nil, to find the single field that dominates the
-// others using Go's embedding rules, modified by the presence of
-// JSON tags. If there are multiple top-level fields, the boolean
-// will be false: This condition is an error in Go and we skip all
-// the fields.
-func dominantField(fields []field) (field, bool) {
-	// The fields are sorted in increasing index-length order, then by presence of tag.
-	// That means that the first field is the dominant one. We need only check
-	// for error cases: two fields at top level, either both tagged or neither tagged.
-	if len(fields) > 1 && len(fields[0].index) == len(fields[1].index) && fields[0].tag == fields[1].tag {
-		return field{}, false
-	}
-	return fields[0], true
-}
-
 var fieldCache sync.Map // map[reflect.Type]structFields
 
 // cachedTypeFields is like typeFields but uses a cache to avoid repeated work.
-func cachedTypeFields(t reflect.Type, opts *options, isSrc bool) structFields {
-	key := t.String() + ":" + strconv.FormatBool(isSrc)
+func cachedTypeFields(t reflect.Type, opts *options, tagKey string) structFields {
+	key := t.String() + ":" + tagKey
 	if f, ok := fieldCache.Load(key); ok {
 		return f.(structFields)
 	}
-	fields := typeFields(t, opts, isSrc)
+	fields := typeFields(t, opts, tagKey)
 	f, _ := fieldCache.LoadOrStore(key, fields)
 	return f.(structFields)
 }
@@ -80,9 +68,9 @@ func cachedTypeFields(t reflect.Type, opts *options, isSrc bool) structFields {
 // 该算法是对要包含的结构体集合进行广度优先搜索 - 首先是顶级结构体，然后是任何可达的匿名结构体。
 // 简单来说，typeFields 函数用于获取应该处理的字段列表。
 // 它使用广度优先搜索算法遍历结构体类型，包括顶级结构体和可达的匿名结构体，并返回这些结构体中应该被处理的字段列表。
-func typeFields(t reflect.Type, opts *options, isSrc bool) structFields {
+func typeFields(t reflect.Type, opts *options, tagKey string) structFields {
 	// current 和 next 两个用于存储当前和下一级的匿名字段的切片
-	current := []field{}
+	current := make([]field, 0)
 	next := []field{{typ: t}}
 
 	// currentCount 和 nextCount 用于记录字段名称出现的次数
@@ -111,7 +99,6 @@ func typeFields(t reflect.Type, opts *options, isSrc bool) structFields {
 			// 3. 遍历字段 f 的类型的每个字段 sf。
 			for i := 0; i < f.typ.NumField(); i++ {
 				sf := f.typ.Field(i)
-
 				// 4. 对于每个字段 sf，根据一定的规则判断是否需要包含该字段, 规则如下
 				//   - 如果 sf 是匿名字段，则检查它的类型是否是导出的结构体类型，如果不是则忽略。
 				//   - 如果 sf 不是匿名字段且不是导出的字段，则忽略。
@@ -132,27 +119,10 @@ func typeFields(t reflect.Type, opts *options, isSrc bool) structFields {
 				}
 
 				// 5. 接下来，它会获取字段的标签，并解析标签中的名称和选项。
-				var tagKey string
-				if isSrc {
-					tagKey = opts.SourceTagKey
-				} else {
-					tagKey = opts.TargetTagKey
-				}
-				tag := sf.Tag.Get(tagKey)
-
-				// 6. 如果是标签是"-",则忽略该字段
-				if tag == "-" {
+				name, ok := tagName(sf, tagKey)
+				if !ok {
 					continue
 				}
-
-				// 7. 获取字段的标签，并解析标签中的名称和选项。
-				name, opts := parseTag(tag)
-				if !isValidTag(name) {
-					// 如果名称无效，则将名称设置为空。
-					name = ""
-				}
-				// 忽略其他 tag options
-				_ = opts
 
 				// 8. 复制字段的索引序列，并将当前字段的索引添加到该序列中。
 				index := make([]int, len(f.index)+1)
@@ -166,29 +136,27 @@ func typeFields(t reflect.Type, opts *options, isSrc bool) structFields {
 					ft = ft.Elem()
 				}
 
-				// Record found field and index sequence.
 				// 10. 记录找到的字段信息，并根据字段所属类型的计数决定是否添加多个副本。
 				if name != "" || !sf.Anonymous || ft.Kind() != reflect.Struct {
 					tagged := name != ""
 					if name == "" {
 						name = sf.Name
 					}
-					field := field{
-						name:  name,
-						tag:   tagged,
-						index: index,
-						typ:   ft,
-						//omitEmpty: opts.Contains("omitempty"),
-					}
-					field.nameBytes = []byte(field.name)
-					field.equalFold = stringx.FoldFunc(field.nameBytes)
-
-					fields = append(fields, field)
+					// 记录字段路径
+					nameBytes := []byte(name)
+					fields = append(fields, field{
+						name:       name,
+						nameBytes:  nameBytes,
+						equalFold:  stringx.FoldFunc(nameBytes),
+						tag:        tagged,
+						index:      index,
+						typ:        ft,
+						clonerFunc: nil,
+						fullName:   fullName(f, name, sf),
+					})
 					if currentCount[f.typ] > 1 {
-						// If there were multiple instances, add a second,
-						// so that the annihilation code will see a duplicate.
-						// It only cares about the distinction between 1 or 2,
-						// so don't bother generating any more copies.
+						// 如果有多个实例，添加第二个，这样湮灭代码将看到一个副本。
+						// 它只关心1和2之间的区别，所以不要再生成任何副本了。
 						fields = append(fields, fields[len(fields)-1])
 					}
 					continue
@@ -197,7 +165,15 @@ func typeFields(t reflect.Type, opts *options, isSrc bool) structFields {
 				// 11. 如果字段是匿名结构体，则记录该结构体以便在下一轮中继续探索。
 				nextCount[ft]++
 				if nextCount[ft] == 1 {
-					next = append(next, field{name: ft.Name(), index: index, typ: ft})
+					if name == "" {
+						name = sf.Name
+					}
+					next = append(next, field{
+						name:     name,
+						index:    index,
+						typ:      ft,
+						fullName: fullName(f, name, sf),
+					})
 				}
 			}
 		}
@@ -218,60 +194,179 @@ func typeFields(t reflect.Type, opts *options, isSrc bool) structFields {
 		return byIndex(x).Less(i, j)
 	})
 
-	// 删除被 Go 语言规则隐藏的字段，只保留具有相同名称的字段中的一个。
+	// 区分出主要字段和次要字段
+	dominants, recessives := divideFields(fields)
+	dominants, dominantsNameIndex := dominantsNameIndex(t, opts, dominants)
+	recessives, recessivesNameIndex, recessivesFullnameIndex := recessivesNameIndex(t, opts, recessives)
+	return structFields{
+		dominants:               dominants,
+		dominantsNameIndex:      dominantsNameIndex,
+		recessives:              recessives,
+		recessivesNameIndex:     recessivesNameIndex,
+		recessivesFullNameIndex: recessivesFullnameIndex,
+	}
+}
 
-	// 对字段进行排序，并根据一定的规则选择主要字段来处理隐藏字段。
-	// 这样做可以确保在后续的处理中，只保留了具有相同名称的字段中的一个主要字段。
+// divideFields 分出主要字段和次要字段
+func divideFields(fields []field) ([]field, []field) {
+	dominants := make([]field, 0, len(fields))
+	recessives := make([]field, 0)
+	for advance, i := 0, 0; i < len(fields); i += advance {
+		// 进行循环，每次循环处理一个字段名称。 在循环内部，查找具有相同名称的字段序列。
+		fi := fields[i]
+		name := fi.name
+		for advance = 1; i+advance < len(fields); advance++ {
+			fj := fields[i+advance]
+			if fj.name != name {
+				break
+			}
+		}
+		if advance == 1 {
+			// 如果只有一个字段具有该名称，则将该字段添加到输出切片中。
+			dominants = append(dominants, fi)
+			continue
+		}
+		group := fields[i : i+advance]
+		if len(group) > 1 && len(group[0].index) == len(group[1].index) && group[0].tag == group[1].tag {
+			// 如果有多个name相同，又在同一级，则一个结构体有两个相同的字段，这种情况全部都忽略
+			continue
+		}
+		dominants = append(dominants, group[0])
+		recessives = append(recessives, group[1:]...)
+	}
+	return dominants, recessives
+}
 
-	// 具体来说，对于具有相同名称的字段序列，代码会选择一个主要字段来保留，而删除其他隐藏字段。
-	// 选择主要字段的规则是调用 dominantField 函数，该函数会根据一定的规则选择一个字段作为主要字段。
-	// 主要字段是指在隐藏字段中具有较高优先级的字段。
-
-	// 创建一个空的切片 out，用于存储经过隐藏字段处理后的字段信息。
-	//out := fields[:0]
-	//for advance, i := 0, 0; i < len(fields); i += advance {
-	//	// 进行循环，每次循环处理一个字段名称。 在循环内部，查找具有相同名称的字段序列。
-	//
-	//	fi := fields[i]
-	//	name := fi.name
-	//	for advance = 1; i+advance < len(fields); advance++ {
-	//		fj := fields[i+advance]
-	//		if fj.name != name {
-	//			break
-	//		}
-	//	}
-	//	if advance == 1 {
-	//		// 如果只有一个字段具有该名称，则将该字段添加到输出切片中。
-	//		out = append(out, fi)
-	//		continue
-	//	}
-	//	dominant, ok := dominantField(fields[i : i+advance])
-	//	if ok {
-	//		// 如果有多个字段具有相同的名称，则使用 dominantField 函数找到其中的一个主要字段，并将其添加到输出切片中。
-	//		out = append(out, dominant)
-	//	}
-	//}
-	//
-	//// 将处理后的字段信息赋值给 fields
-	//fields = out
-
+func recessivesNameIndex(t reflect.Type, opts *options, fields []field) ([]field, map[string][]int, map[string]int) {
 	// 对字段进行排序，按照索引顺序排序。
 	sort.Sort(byIndex(fields))
-
 	// 对每个字段，设置其克隆器cloner
 	for i := range fields {
 		f := &fields[i]
 		f.clonerFunc = typeCloner(typeByIndex(t, f.index), opts)
 	}
+	// 创建一个映射 nameIndex，用于通过字段名称查找字段在 fields 中的索引。
+	nameIndex := make(map[string][]int, len(fields))
+	fullNameIndex := make(map[string]int, len(fields))
+	for i, field := range fields {
+		nameIndex[field.name] = append(nameIndex[field.name], i)
+		fullNameIndex[field.fullName] = i
+	}
+	return fields, nameIndex, fullNameIndex
+}
 
+func dominantsNameIndex(t reflect.Type, opts *options, fields []field) ([]field, map[string]int) {
+	// 对字段进行排序，按照索引顺序排序。
+	sort.Sort(byIndex(fields))
+	// 对每个字段，设置其克隆器cloner
+	for i := range fields {
+		f := &fields[i]
+		f.clonerFunc = typeCloner(typeByIndex(t, f.index), opts)
+	}
 	// 创建一个映射 nameIndex，用于通过字段名称查找字段在 fields 中的索引。
 	nameIndex := make(map[string]int, len(fields))
 	for i, field := range fields {
 		nameIndex[field.name] = i
 	}
+	return fields, nameIndex
+}
 
-	// 返回包含字段信息和字段索引映射的 structFields 结构体。
-	return structFields{fields, nameIndex}
+func findDominantField(tgtFields structFields, opts *options, tagName string) (field, bool) {
+	// 查找tgt字段
+	if tgtIdx, ok := tgtFields.dominantsNameIndex[tagName]; ok {
+		// 找到了一个完全匹配的字段名称
+		return tgtFields.dominants[tgtIdx], true
+	} else {
+		// 代码回退到了一种更为耗时的线性搜索方法，该方法在进行字段名称匹配时不考虑大小写
+		for tgtKey, tgtIdx := range tgtFields.dominantsNameIndex {
+			if opts.EqualFold(tgtKey, tagName) {
+				return tgtFields.dominants[tgtIdx], true
+			}
+		}
+	}
+	return field{}, false
+}
+
+func findRecessiveField(tgtFields structFields, opts *options, tagKey string) ([]field, bool) {
+	// 查找tgt字段
+	if tgtIdxs, ok := tgtFields.recessivesNameIndex[tagKey]; ok {
+		// 找到了一个完全匹配的字段名称
+		fields := make([]field, 0, len(tgtIdxs))
+		for _, tgtIdx := range tgtIdxs {
+			fields = append(fields, tgtFields.recessives[tgtIdx])
+		}
+		return fields, true
+	} else {
+		// 代码回退到了一种更为耗时的线性搜索方法，该方法在进行字段名称匹配时不考虑大小写
+		for tgtKey, tgtIdxs := range tgtFields.recessivesNameIndex {
+			if opts.EqualFold(tgtKey, tagKey) {
+				fields := make([]field, 0, len(tgtIdxs))
+				for _, tgtIdx := range tgtIdxs {
+					fields = append(fields, tgtFields.recessives[tgtIdx])
+				}
+				return fields, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func findValue(val reflect.Value, f field) (reflect.Value, bool) {
+	outVal := val
+	for _, i := range f.index {
+		if outVal.Kind() == reflect.Pointer {
+			if outVal.IsNil() {
+				return reflect.Value{}, false
+			}
+			outVal = outVal.Elem()
+		}
+		outVal = outVal.Field(i)
+	}
+	return outVal, true
+}
+
+func findSettableValue(val reflect.Value, f field) (reflect.Value, error) {
+	outVal := val
+	for _, i := range f.index {
+		if outVal.Kind() == reflect.Pointer {
+			if outVal.IsNil() {
+				if !outVal.CanSet() {
+					return reflect.Value{}, fmt.Errorf("prototype: cannot set embedded pointer to unexported struct: %v", outVal.Type().Elem())
+				}
+				outVal.Set(reflect.New(outVal.Type().Elem()))
+			}
+			outVal = outVal.Elem()
+		}
+		outVal = outVal.Field(i)
+	}
+	return outVal, nil
+}
+
+func tagName(sf reflect.StructField, tagKey string) (string, bool) {
+	tag := sf.Tag.Get(tagKey)
+	// 如果是标签是"-",则忽略该字段
+	if tag == "-" {
+		return "", false
+	}
+	// 获取字段的标签，并解析标签中的名称和选项。
+	name, opts := parseTag(tag)
+	if !isValidTag(name) {
+		// 如果名称无效，则将名称设置为空。
+		name = ""
+	}
+	// 忽略其他 tag options
+	_ = opts
+	return name, true
+}
+
+func fullName(f field, name string, sf reflect.StructField) string {
+	var fullName string
+	if len(f.fullName) > 0 {
+		fullName = strings.Join([]string{f.fullName, name}, ".")
+	} else {
+		fullName = sf.Name
+	}
+	return fullName
 }
 
 func typeByIndex(t reflect.Type, index []int) reflect.Type {

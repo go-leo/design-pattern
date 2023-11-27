@@ -2,6 +2,7 @@ package prototype
 
 import (
 	"encoding"
+	"errors"
 	"fmt"
 	"github.com/go-leo/gox/convx"
 	"github.com/go-leo/gox/reflectx"
@@ -77,11 +78,7 @@ func intCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 	switch tv.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if tv.OverflowInt(i) {
-			return &OverflowError{
-				FullKeys:    fks,
-				TargetValue: tgtVal,
-				Value:       strconv.FormatInt(i, 10),
-			}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatInt(i, 10)}
 		}
 		tv.SetInt(i)
 		return nil
@@ -91,14 +88,14 @@ func intCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 		}
 		u := uint64(i)
 		if tv.OverflowUint(u) {
-			return &OverflowError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatInt(i, 10)}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatInt(i, 10)}
 		}
 		tv.SetUint(u)
 		return nil
 	case reflect.Float32, reflect.Float64:
 		f := float64(i)
 		if tv.OverflowFloat(f) {
-			return &OverflowError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatInt(i, 10)}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatInt(i, 10)}
 		}
 		tv.SetFloat(f)
 		return nil
@@ -127,24 +124,24 @@ func uintCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 	switch tv.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if u > uint64(math.MaxInt64) {
-			return &OverflowError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatUint(u, 10)}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatUint(u, 10)}
 		}
 		i := int64(u)
 		if tv.OverflowInt(i) {
-			return &OverflowError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatUint(u, 10)}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatUint(u, 10)}
 		}
 		tv.SetInt(i)
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		if tv.OverflowUint(u) {
-			return &OverflowError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatUint(u, 10)}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatUint(u, 10)}
 		}
 		tv.SetUint(u)
 		return nil
 	case reflect.Float32, reflect.Float64:
 		f := float64(u)
 		if tv.OverflowFloat(f) {
-			return &OverflowError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatUint(u, 10)}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatUint(u, 10)}
 		}
 		tv.SetFloat(f)
 		return nil
@@ -181,38 +178,30 @@ func (bits floatCloner) encode(e *cloneContext, fks []string, tgtVal, srcVal ref
 	switch tv.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if f > float64(math.MaxInt64) || f < float64(math.MinInt64) {
-			return &OverflowError{
-				FullKeys:    fks,
-				TargetValue: tgtVal,
-				Value:       strconv.FormatFloat(f, 'g', -1, 64),
-			}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, 64)}
 		}
 		i := int64(f)
 		if tv.OverflowInt(i) {
-			return &OverflowError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatFloat(f, 'g', -1, int(bits))}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, int(bits))}
 		}
 		tv.SetInt(i)
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		if f > float64(math.MaxUint64) {
-			return &OverflowError{
-				FullKeys:    fks,
-				TargetValue: tgtVal,
-				Value:       strconv.FormatFloat(f, 'g', -1, 64),
-			}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, 64)}
 		}
 		if f < 0 {
 			return &NegativeNumberError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatFloat(f, 'g', -1, int(bits))}
 		}
 		u := uint64(f)
 		if tv.OverflowUint(u) {
-			return &OverflowError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatFloat(f, 'g', -1, int(bits))}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, int(bits))}
 		}
 		tv.SetUint(u)
 		return nil
 	case reflect.Float32, reflect.Float64:
 		if tv.OverflowFloat(f) {
-			return &OverflowError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatFloat(f, 'g', -1, int(bits))}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, int(bits))}
 		}
 		tv.SetFloat(f)
 		return nil
@@ -257,11 +246,11 @@ func stringCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 }
 
 func interfaceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	if !tgtVal.IsValid() {
+	if srcVal.IsNil() {
 		return nil
 	}
-	if srcVal.IsNil() {
-		return emptyValueCloner(e, fks, tgtVal, srcVal, opts)
+	if !tgtVal.IsValid() {
+		return nil
 	}
 	srcVal = srcVal.Elem()
 	return valueCloner(srcVal, opts)(e, fks, tgtVal, srcVal, opts)
@@ -289,11 +278,37 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 	case reflect.Slice:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.Struct:
-		return struct2StructCloner(e, fks, tgtVal, srcVal, opts)
+		return struct2StructCloner(e, fks, tv, srcVal, opts)
 	case reflect.Interface:
-		return struct2InterfaceCloner(e, fks, tgtVal, srcVal, opts, tv)
+		if tv.NumMethod() == 0 {
+			// 创建一个新的空对象
+			v := reflect.New(srcVal.Type())
+			if err := struct2StructCloner(e, fks, v.Elem(), srcVal, opts); err != nil {
+				return err
+			}
+			// 设置到目标对象
+			tv.Set(v)
+			return nil
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.Map:
-		// TODO Map cloner
+		t := tv.Type()
+		switch t.Key().Kind() {
+		case reflect.String,
+			reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+			if tv.IsNil() {
+				tv.Set(reflect.MakeMap(t))
+			}
+			return struct2MapCloner(e, fks, tv, srcVal, opts)
+		default:
+			if reflect.PointerTo(t.Key()).Implements(textUnmarshalerType) {
+				if tv.IsNil() {
+					tv.Set(reflect.MakeMap(t))
+				}
+				return struct2MapCloner(e, fks, tv, srcVal, opts)
+			}
+		}
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.Array:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
@@ -328,22 +343,14 @@ func struct2IntCloner(e *cloneContext, fks []string, tgtVal reflect.Value, srcVa
 	case sqlNullFloat64Type:
 		f := srcVal.FieldByName("Float64").Float()
 		if f > float64(math.MaxInt64) || f < float64(math.MinInt64) {
-			return &OverflowError{
-				FullKeys:    fks,
-				TargetValue: tgtVal,
-				Value:       strconv.FormatFloat(f, 'g', -1, 64),
-			}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, 64)}
 		}
 		i = int64(f)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
 	if tv.OverflowInt(i) {
-		return &OverflowError{
-			FullKeys:    fks,
-			TargetValue: tgtVal,
-			Value:       strconv.FormatInt(i, 10),
-		}
+		return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatInt(i, 10)}
 	}
 	tv.SetInt(i)
 	return nil
@@ -375,11 +382,7 @@ func struct2UintCloner(e *cloneContext, fks []string, tgtVal reflect.Value, srcV
 	case sqlNullFloat64Type:
 		f := srcVal.FieldByName("Float64").Float()
 		if f > float64(math.MaxUint64) {
-			return &OverflowError{
-				FullKeys:    fks,
-				TargetValue: tgtVal,
-				Value:       strconv.FormatFloat(f, 'g', -1, 64),
-			}
+			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, 64)}
 		}
 		if f < 0 {
 			return &NegativeNumberError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatFloat(f, 'g', -1, 64)}
@@ -389,7 +392,7 @@ func struct2UintCloner(e *cloneContext, fks []string, tgtVal reflect.Value, srcV
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
 	if tv.OverflowUint(u) {
-		return &OverflowError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatUint(u, 10)}
+		return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatUint(u, 10)}
 	}
 	tv.SetUint(u)
 	return nil
@@ -412,98 +415,204 @@ func struct2FloatCloner(e *cloneContext, fks []string, tgtVal reflect.Value, src
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
 	if tv.OverflowFloat(f) {
-		return &OverflowError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatFloat(f, 'g', -1, 64)}
+		return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, 64)}
 	}
 	tv.SetFloat(f)
 	return nil
 }
 
-func struct2InterfaceCloner(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value) error {
-	if tv.NumMethod() == 0 {
-		// 创建一个新的空对象
-		v := reflect.New(srcVal.Type())
-		clonedVal := v.Elem()
-		if err := struct2StructCloner(e, fks, clonedVal, srcVal, opts); err != nil {
-			return err
-		}
-		// 设置到目标对象
-		tv.Set(v)
-		return nil
-	}
-	return hookCloner(e, fks, tgtVal, srcVal, opts)
-}
-
 func struct2StructCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	tgtType := tgtVal.Type()
-	tgtFields := cachedTypeFields(tgtType, opts, false)
+	tgtFields := cachedTypeFields(tgtType, opts, opts.TargetTagKey)
 	srcType := srcVal.Type()
-	srcFields := cachedTypeFields(srcType, opts, true)
+	srcFields := cachedTypeFields(srcType, opts, opts.SourceTagKey)
+	if err := struct2StructDominantFieldCloner(e, fks, tgtVal, srcVal, tgtType, srcType, tgtFields, srcFields, opts); err != nil {
+		return err
+	}
+	if err := struct2StructRecessivesFieldCloner(e, fks, tgtVal, srcVal, tgtType, srcType, tgtFields, srcFields, opts); err != nil {
+		return err
+	}
+	return nil
+}
+
+func struct2StructDominantFieldCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, tgtType, srcType reflect.Type, tgtFields, srcFields structFields, opts *options) error {
 	// 复制字段, 循环src字段
-FieldLoop:
-	for srcKey, srcIdx := range srcFields.nameIndex {
-		srcField := srcFields.list[srcIdx]
-		srcFieldVal := srcVal
-
+	for srcName, srcIdx := range srcFields.dominantsNameIndex {
+		srcDominantField := srcFields.dominants[srcIdx]
 		// 查找src字段值
-		for _, i := range srcField.index {
-			if srcFieldVal.Kind() == reflect.Pointer {
-				if srcFieldVal.IsNil() {
-					continue FieldLoop
-				}
-				srcFieldVal = srcFieldVal.Elem()
-			}
-			srcFieldVal = srcFieldVal.Field(i)
+		srcDominantFieldVal, ok := findValue(srcVal, srcDominantField)
+		if !ok {
+			continue
 		}
 
-		// 查找tgt字段
-		var tgtField *field
-		tgtIdx, ok := tgtFields.nameIndex[srcKey]
-		if ok {
-			// 找到了一个完全匹配的字段名称
-			tgtField = &tgtFields.list[tgtIdx]
-		} else {
-			// 代码回退到了一种更为耗时的线性搜索方法，该方法在进行字段名称匹配时不考虑大小写
-			for tgtKey, tgtIdx := range tgtFields.nameIndex {
-				if opts.EqualFold(tgtKey, srcKey) {
-					tgtField = &tgtFields.list[tgtIdx]
-					break
-				}
-			}
-		}
-		if tgtField == nil {
+		// 查找 tgt 主要字段
+		tgtDominantField, ok := findDominantField(tgtFields, opts, srcName)
+		if !ok {
 			// 没有找到目标，则跳过
-			continue FieldLoop
+			continue
 		}
 
 		// 查找tgt字段值
-		tgtFieldVal := tgtVal
-		for _, i := range tgtField.index {
-			if tgtFieldVal.Kind() == reflect.Pointer {
-				if tgtFieldVal.IsNil() {
-					if !tgtFieldVal.CanSet() {
-						return fmt.Errorf("prototype: cannot set embedded pointer to unexported struct: %v", tgtFieldVal.Type().Elem())
-					}
-					tgtFieldVal.Set(reflect.New(tgtFieldVal.Type().Elem()))
-				}
-				tgtFieldVal = tgtFieldVal.Elem()
-			}
-			tgtFieldVal = tgtFieldVal.Field(i)
+		tgtDominantFieldVal, err := findSettableValue(tgtVal, tgtDominantField)
+		if err != nil {
+			return err
 		}
 
 		// 如果src字段是空值，则克隆空值
-		if reflectx.IsEmptyValue(srcFieldVal) {
-			if err := emptyValueCloner(e, append(slices.Clone(fks), srcKey), tgtFieldVal, srcFieldVal, opts); err != nil {
+		if reflectx.IsEmptyValue(srcDominantFieldVal) {
+			if err := emptyValueCloner(e, append(slices.Clone(fks), srcName), tgtDominantFieldVal, srcDominantFieldVal, opts); err != nil {
 				return err
 			}
 			continue
 		}
 
 		// 克隆src字段到tgt字段
-		if err := srcField.clonerFunc(e, append(slices.Clone(fks), srcKey), tgtFieldVal, srcFieldVal, opts); err != nil {
+		if err := srcDominantField.clonerFunc(e, append(slices.Clone(fks), srcName), tgtDominantFieldVal, srcDominantFieldVal, opts); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func struct2StructRecessivesFieldCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, tgtType, srcType reflect.Type, tgtFields, srcFields structFields, opts *options) error {
+	// 复制字段, 循环src字段
+	for srcKey, srcIdxs := range srcFields.recessivesNameIndex {
+		srcRecessiveFieldValMap := make(map[string]reflect.Value)
+		for _, srcIdx := range srcIdxs {
+			srcRecessiveField := srcFields.recessives[srcIdx]
+			// 查找src字段值
+			srcRecessiveFieldVal, ok := findValue(srcVal, srcRecessiveField)
+			if !ok {
+				continue
+			}
+			srcRecessiveFieldValMap[srcRecessiveField.fullName] = srcRecessiveFieldVal
+		}
+		if len(srcRecessiveFieldValMap) <= 0 {
+			continue
+		}
+
+		tgtRecessiveFields, ok := findRecessiveField(tgtFields, opts, srcKey)
+		if !ok {
+			continue
+		}
+		if len(tgtRecessiveFields) <= 0 {
+			continue
+		}
+
+		tgtRecessiveFieldValMap := make(map[string]reflect.Value)
+		for _, recessiveField := range tgtRecessiveFields {
+			// 查找tgt字段值
+			tgtFieldVal, err := findSettableValue(tgtVal, recessiveField)
+			if err != nil {
+				return err
+			}
+			tgtRecessiveFieldValMap[recessiveField.fullName] = tgtFieldVal
+		}
+
+		for fullName, srcRecessiveFieldVal := range srcRecessiveFieldValMap {
+			tgtRecessiveFieldVal, ok := tgtRecessiveFieldValMap[fullName]
+			if !ok {
+				continue
+			}
+			// 如果src字段是空值，则克隆空值
+			if reflectx.IsEmptyValue(srcRecessiveFieldVal) {
+				if err := emptyValueCloner(e, append(slices.Clone(fks), srcKey), tgtRecessiveFieldVal, srcRecessiveFieldVal, opts); err != nil {
+					return err
+				}
+				continue
+			}
+
+			// 克隆src字段到tgt字段
+			srcRecessiveField := srcFields.recessives[srcFields.recessivesFullNameIndex[fullName]]
+			if err := srcRecessiveField.clonerFunc(e, append(slices.Clone(fks), srcKey), tgtRecessiveFieldVal, srcRecessiveFieldVal, opts); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func struct2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	srcType := srcVal.Type()
+	srcFields := cachedTypeFields(srcType, opts, opts.SourceTagKey)
+	_ = srcFields
+	return nil
+}
+
+func struct2MapDominantFieldCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, srcFields structFields, t reflect.Type, opts *options) error {
+	// 复制字段, 循环src字段
+	var mapElem reflect.Value
+	elemType := t.Elem()
+	for srcName, srcIdx := range srcFields.dominantsNameIndex {
+		srcDominantField := srcFields.dominants[srcIdx]
+		// 查找src字段值
+		srcDominantFieldVal, ok := findValue(srcVal, srcDominantField)
+		if !ok {
+			continue
+		}
+
+		if !mapElem.IsValid() {
+			mapElem = reflect.New(elemType).Elem()
+		} else {
+			mapElem.Set(reflect.Zero(elemType))
+		}
+		subv := mapElem
+
+		// 如果src字段是空值，则克隆空值
+		if reflectx.IsEmptyValue(srcDominantFieldVal) {
+			if err := emptyValueCloner(e, append(slices.Clone(fks), srcName), subv, srcDominantFieldVal, opts); err != nil {
+				return err
+			}
+		} else {
+			// 克隆src字段到tgt字段
+			if err := srcDominantField.clonerFunc(e, append(slices.Clone(fks), srcName), subv, srcDominantFieldVal, opts); err != nil {
+				return err
+			}
+		}
+
+		if keyVal.IsValid() {
+			tgtVal.SetMapIndex(keyVal, subv)
+		}
+	}
+	return nil
+}
+
+func struct2MapDominantFieldCloners(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, srcFields structFields, t reflect.Type, key string, opts *options) (reflect.Value, error) {
+	keyType := t.Key()
+	switch {
+	case reflect.PointerTo(keyType).Implements(textUnmarshalerType):
+		keyVal := reflect.New(keyType)
+		if textUnmarshaler, ok := keyVal.Interface().(encoding.TextUnmarshaler); ok {
+			if err := textUnmarshaler.UnmarshalText([]byte(key)); err != nil {
+				return reflect.Value{}, err
+			}
+		}
+		return keyVal.Elem(), nil
+	case keyType.Kind() == reflect.String:
+		return reflect.ValueOf(key).Convert(keyType), nil
+	default:
+		switch keyType.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			n, err := strconv.ParseInt(key, 10, 64)
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			if reflect.Zero(keyType).OverflowInt(n) {
+				return reflect.Value{}, &OverflowError{FullKeys: fks, TargetType: keyType, Value: key}
+			}
+			return reflect.ValueOf(n).Convert(keyType), nil
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+			n, err := strconv.ParseUint(key, 10, 64)
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			if reflect.Zero(keyType).OverflowUint(n) {
+				return reflect.Value{}, &OverflowError{FullKeys: fks, TargetType: keyType, Value: key}
+			}
+			return reflect.ValueOf(n).Convert(keyType), nil
+		}
+	}
+	return reflect.Value{}, errors.New("prototype: Unexpected key type") // should never occur
 }
 
 type reflectWithString struct {
@@ -548,7 +657,7 @@ func mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 		}
 	}
 	if srcVal.IsNil() {
-		return emptyValueCloner(e, fks, tgtVal, srcVal, opts)
+		return nil
 	}
 	if e.forward(); e.isTooDeep() {
 		// We're a large number of nested ptrCloner.encode calls deep;
@@ -585,11 +694,11 @@ func mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 
 // sliceCloner just wraps an arrayCloner, checking to make sure the value isn't nil.
 func sliceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	if !tgtVal.IsValid() {
+	if srcVal.IsNil() {
 		return nil
 	}
-	if srcVal.IsNil() {
-		return emptyValueCloner(e, fks, tgtVal, srcVal, opts)
+	if !tgtVal.IsValid() {
+		return nil
 	}
 	if e.forward(); e.isTooDeep() {
 		// We're a large number of nested ptrCloner.encode calls deep;
@@ -677,7 +786,7 @@ func anySliceClone(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, 
 
 func ptrCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if srcVal.IsNil() {
-		return emptyValueCloner(e, fks, tgtVal, srcVal, opts)
+		return nil
 	}
 	if e.forward(); e.isTooDeep() {
 		// We're a large number of nested ptrCloner.encode calls deep;

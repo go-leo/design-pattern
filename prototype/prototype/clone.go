@@ -35,11 +35,11 @@ func clone(e *cloneContext, tgtVal, srcVal reflect.Value, opts *options) error {
 
 var clonerCache sync.Map
 
-func valueCloner(srvVal reflect.Value, opts *options) ClonerFunc {
-	if !srvVal.IsValid() {
+func valueCloner(srcVal reflect.Value, opts *options) ClonerFunc {
+	if !srcVal.IsValid() {
 		return emptyValueCloner
 	}
-	return typeCloner(srvVal.Type(), opts)
+	return typeCloner(srcVal.Type(), opts)
 }
 
 func typeCloner(srcType reflect.Type, opts *options) ClonerFunc {

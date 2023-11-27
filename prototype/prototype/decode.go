@@ -208,7 +208,7 @@ func object(d *decodeState, tgtVal reflect.Value, opts *options) error {
 			tgtVal.Set(reflect.MakeMap(t))
 		}
 	case reflect.Struct:
-		fields = cachedTypeFields(t, opts, false)
+		fields = cachedTypeFields(t, opts, opts.TargetTagKey)
 		// ok
 	default:
 		return &CloneError{Value: "object", Type: t}
@@ -236,7 +236,6 @@ func object(d *decodeState, tgtVal reflect.Value, opts *options) error {
 			return ErrPhase
 		}
 
-		// Figure out field corresponding to key.
 		var subv reflect.Value
 
 		if tgtVal.Kind() == reflect.Map {
@@ -249,14 +248,14 @@ func object(d *decodeState, tgtVal reflect.Value, opts *options) error {
 			subv = mapElem
 		} else {
 			var tgtField *field
-			if i, ok := fields.nameIndex[string(key)]; ok {
+			if i, ok := fields.dominantsNameIndex[string(key)]; ok {
 				// Found an exact Nil match.
-				tgtField = &fields.list[i]
+				tgtField = &fields.dominants[i]
 			} else {
 				// Fall back to the expensive case-insensitive
 				// linear search.
-				for i := range fields.list {
-					ff := &fields.list[i]
+				for i := range fields.dominants {
+					ff := &fields.dominants[i]
 					if ff.equalFold(ff.nameBytes, key) {
 						tgtField = ff
 						break
