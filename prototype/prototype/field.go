@@ -30,6 +30,7 @@ type structFields struct {
 	recessives              []field
 	recessivesNameIndex     map[string][]int
 	recessivesFullNameIndex map[string]int
+	selfFields              []field
 }
 
 // byIndex sorts field by index sequence.
@@ -81,6 +82,8 @@ func typeFields(t reflect.Type, opts *options, tagKey string) structFields {
 
 	// fields 用于存储找到的字段
 	var fields []field
+
+	var selfFields []field
 
 	// len(next) > 0，表示还有下一级的匿名字段需要探索
 	for len(next) > 0 {
@@ -136,24 +139,28 @@ func typeFields(t reflect.Type, opts *options, tagKey string) structFields {
 					ft = ft.Elem()
 				}
 
+				tagged := name != ""
+				if name == "" {
+					name = sf.Name
+				}
+				nameBytes := []byte(name)
+				currField := field{
+					name:       name,
+					nameBytes:  nameBytes,
+					equalFold:  stringx.FoldFunc(nameBytes),
+					tag:        tagged,
+					index:      index,
+					typ:        ft,
+					clonerFunc: typeCloner(typeByIndex(t, index), opts),
+					fullName:   fullName(f, name, sf),
+				}
+				if t == f.typ {
+					selfFields = append(selfFields, currField)
+				}
 				// 10. 记录找到的字段信息，并根据字段所属类型的计数决定是否添加多个副本。
-				if name != "" || !sf.Anonymous || ft.Kind() != reflect.Struct {
-					tagged := name != ""
-					if name == "" {
-						name = sf.Name
-					}
+				if tagged || !sf.Anonymous || ft.Kind() != reflect.Struct {
 					// 记录字段路径
-					nameBytes := []byte(name)
-					fields = append(fields, field{
-						name:       name,
-						nameBytes:  nameBytes,
-						equalFold:  stringx.FoldFunc(nameBytes),
-						tag:        tagged,
-						index:      index,
-						typ:        ft,
-						clonerFunc: nil,
-						fullName:   fullName(f, name, sf),
-					})
+					fields = append(fields, currField)
 					if currentCount[f.typ] > 1 {
 						// 如果有多个实例，添加第二个，这样湮灭代码将看到一个副本。
 						// 它只关心1和2之间的区别，所以不要再生成任何副本了。
@@ -165,15 +172,7 @@ func typeFields(t reflect.Type, opts *options, tagKey string) structFields {
 				// 11. 如果字段是匿名结构体，则记录该结构体以便在下一轮中继续探索。
 				nextCount[ft]++
 				if nextCount[ft] == 1 {
-					if name == "" {
-						name = sf.Name
-					}
-					next = append(next, field{
-						name:     name,
-						index:    index,
-						typ:      ft,
-						fullName: fullName(f, name, sf),
-					})
+					next = append(next, currField)
 				}
 			}
 		}
@@ -204,6 +203,7 @@ func typeFields(t reflect.Type, opts *options, tagKey string) structFields {
 		recessives:              recessives,
 		recessivesNameIndex:     recessivesNameIndex,
 		recessivesFullNameIndex: recessivesFullnameIndex,
+		selfFields:              selfFields,
 	}
 }
 
@@ -241,10 +241,10 @@ func recessivesNameIndex(t reflect.Type, opts *options, fields []field) ([]field
 	// 对字段进行排序，按照索引顺序排序。
 	sort.Sort(byIndex(fields))
 	// 对每个字段，设置其克隆器cloner
-	for i := range fields {
-		f := &fields[i]
-		f.clonerFunc = typeCloner(typeByIndex(t, f.index), opts)
-	}
+	//for i := range fields {
+	//	f := &fields[i]
+	//	f.clonerFunc = typeCloner(typeByIndex(t, f.index), opts)
+	//}
 	// 创建一个映射 nameIndex，用于通过字段名称查找字段在 fields 中的索引。
 	nameIndex := make(map[string][]int, len(fields))
 	fullNameIndex := make(map[string]int, len(fields))
@@ -259,10 +259,10 @@ func dominantsNameIndex(t reflect.Type, opts *options, fields []field) ([]field,
 	// 对字段进行排序，按照索引顺序排序。
 	sort.Sort(byIndex(fields))
 	// 对每个字段，设置其克隆器cloner
-	for i := range fields {
-		f := &fields[i]
-		f.clonerFunc = typeCloner(typeByIndex(t, f.index), opts)
-	}
+	//for i := range fields {
+	//f := &fields[i]
+	//f.clonerFunc = typeCloner(typeByIndex(t, f.index), opts)
+	//}
 	// 创建一个映射 nameIndex，用于通过字段名称查找字段在 fields 中的索引。
 	nameIndex := make(map[string]int, len(fields))
 	for i, field := range fields {

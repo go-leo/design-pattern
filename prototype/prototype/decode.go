@@ -187,6 +187,7 @@ func object(d *decodeState, tgtVal reflect.Value, opts *options) error {
 
 	var fields structFields
 
+	_ = fields
 	// Check type of target:
 	//   struct or
 	//   map[T1]T2 where T1 is string, an integer type,
@@ -247,47 +248,6 @@ func object(d *decodeState, tgtVal reflect.Value, opts *options) error {
 			}
 			subv = mapElem
 		} else {
-			var tgtField *field
-			if i, ok := fields.dominantsNameIndex[string(key)]; ok {
-				// Found an exact Nil match.
-				tgtField = &fields.dominants[i]
-			} else {
-				// Fall back to the expensive case-insensitive
-				// linear search.
-				for i := range fields.dominants {
-					ff := &fields.dominants[i]
-					if ff.equalFold(ff.nameBytes, key) {
-						tgtField = ff
-						break
-					}
-				}
-			}
-			if tgtField != nil {
-				subv = tgtVal
-				for _, i := range tgtField.index {
-					if subv.Kind() == reflect.Pointer {
-						if subv.IsNil() {
-							// If a struct embeds a pointer to an unexported type,
-							// it is not possible to set a newly allocated value
-							// since the field is unexported.
-							//
-							// See https://golang.org/issue/21357
-							if !subv.CanSet() {
-								d.saveError(fmt.Errorf("json: cannot set embedded pointer to unexported struct: %v", subv.Type().Elem()))
-								// Invalidate subv to ensure d.value(subv) skips over
-								// the JSON value without assigning it to subv.
-								subv = reflect.Value{}
-								break
-							}
-							subv.Set(reflect.New(subv.Type().Elem()))
-						}
-						subv = subv.Elem()
-					}
-					subv = subv.Field(i)
-				}
-			} else if d.disallowUnknownFields {
-				d.saveError(fmt.Errorf("json: unknown field %q", key))
-			}
 		}
 
 		// Read : before value.

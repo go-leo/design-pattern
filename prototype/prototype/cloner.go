@@ -35,6 +35,7 @@ func emptyValueCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 		return nil
 	default:
 		// otherwise, ignore nil for primitives/string
+		tv.Set(reflect.Zero(tv.Type()))
 		return nil
 	}
 }
@@ -281,22 +282,15 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 		return struct2StructCloner(e, fks, tv, srcVal, opts)
 	case reflect.Interface:
 		if tv.NumMethod() == 0 {
-			// 创建一个新的空对象
-			v := reflect.New(srcVal.Type())
-			if err := struct2StructCloner(e, fks, v.Elem(), srcVal, opts); err != nil {
-				return err
-			}
-			// 设置到目标对象
-			tv.Set(v)
-			return nil
+			return struct2AnyCloner(e, fks, tv, srcVal, opts)
 		}
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.Map:
 		t := tv.Type()
 		switch t.Key().Kind() {
-		case reflect.String,
-			reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+			reflect.String, reflect.Bool, reflect.Float32, reflect.Float64:
 			if tv.IsNil() {
 				tv.Set(reflect.MakeMap(t))
 			}
@@ -532,21 +526,66 @@ func struct2StructRecessivesFieldCloner(e *cloneContext, fks []string, tgtVal, s
 	return nil
 }
 
-func struct2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func struct2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	m := make(map[string]any)
 	srcType := srcVal.Type()
 	srcFields := cachedTypeFields(srcType, opts, opts.SourceTagKey)
-	_ = srcFields
+	for _, selfField := range srcFields.selfFields {
+		// 查找src字段值
+		srcDominantFieldVal, ok := findValue(srcVal, selfField)
+		if !ok {
+			continue
+		}
+
+		var vVal reflect.Value
+		switch srcDominantFieldVal.Kind() {
+		case reflect.String:
+			vVal = reflect.ValueOf(new(string))
+		case reflect.Bool:
+			vVal = reflect.ValueOf(new(bool))
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			vVal = reflect.ValueOf(new(int64))
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+			vVal = reflect.ValueOf(new(uint64))
+		case reflect.Float32, reflect.Float64:
+			vVal = reflect.ValueOf(new(float64))
+		case reflect.Interface, reflect.Pointer:
+			vVal = reflect.New(srcType)
+		case reflect.Array:
+			vVal = reflect.ValueOf(new([]any))
+		case reflect.Map:
+			vVal = reflect.ValueOf(new(map[string]any))
+		case reflect.Slice:
+			vVal = reflect.ValueOf(new([]any))
+		case reflect.Struct:
+			vVal = reflect.ValueOf(new(map[string]any))
+		default:
+			return errors.New("prototype: Unexpected type")
+		}
+
+		// 克隆src字段到tgt字段
+		if err := selfField.clonerFunc(e, append(slices.Clone(fks), selfField.name), vVal, srcDominantFieldVal, opts); err != nil {
+			return err
+		}
+
+		m[selfField.name] = vVal.Elem().Interface()
+	}
+
+	tgtVal.Set(reflect.ValueOf(m))
 	return nil
 }
 
-func struct2MapDominantFieldCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, srcFields structFields, t reflect.Type, opts *options) error {
+func struct2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	srcType := srcVal.Type()
+	srcFields := cachedTypeFields(srcType, opts, opts.SourceTagKey)
+	tgtType := tgtVal.Type()
+
 	// 复制字段, 循环src字段
 	var mapElem reflect.Value
-	elemType := t.Elem()
-	for srcName, srcIdx := range srcFields.dominantsNameIndex {
-		srcDominantField := srcFields.dominants[srcIdx]
+	elemType := tgtType.Elem()
+	for _, selfField := range srcFields.selfFields {
 		// 查找src字段值
-		srcDominantFieldVal, ok := findValue(srcVal, srcDominantField)
+		srcDominantFieldVal, ok := findValue(srcVal, selfField)
 		if !ok {
 			continue
 		}
@@ -556,63 +595,72 @@ func struct2MapDominantFieldCloner(e *cloneContext, fks []string, tgtVal, srcVal
 		} else {
 			mapElem.Set(reflect.Zero(elemType))
 		}
-		subv := mapElem
+		vVal := mapElem
 
-		// 如果src字段是空值，则克隆空值
-		if reflectx.IsEmptyValue(srcDominantFieldVal) {
-			if err := emptyValueCloner(e, append(slices.Clone(fks), srcName), subv, srcDominantFieldVal, opts); err != nil {
-				return err
-			}
-		} else {
-			// 克隆src字段到tgt字段
-			if err := srcDominantField.clonerFunc(e, append(slices.Clone(fks), srcName), subv, srcDominantFieldVal, opts); err != nil {
-				return err
-			}
+		// 克隆src字段到tgt字段
+		if err := selfField.clonerFunc(e, append(slices.Clone(fks), selfField.name), vVal, srcDominantFieldVal, opts); err != nil {
+			return err
 		}
 
-		if keyVal.IsValid() {
-			tgtVal.SetMapIndex(keyVal, subv)
+		kType := tgtType.Key()
+		var kVal reflect.Value
+		switch {
+		case reflect.PointerTo(kType).Implements(textUnmarshalerType):
+			kVal = reflect.New(kType)
+			if u, ok := kVal.Interface().(encoding.TextUnmarshaler); ok {
+				err := u.UnmarshalText([]byte(selfField.name))
+				if err != nil {
+					return err
+				}
+			}
+			kVal = kVal.Elem()
+		case kType.Kind() == reflect.String:
+			kVal = reflect.ValueOf(selfField.name).Convert(kType)
+		case kType.Kind() == reflect.Bool:
+			b, err := strconv.ParseBool(selfField.name)
+			if err != nil {
+				return err
+			}
+			kVal = reflect.ValueOf(b).Convert(kType)
+		default:
+			switch kType.Kind() {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				n, err := strconv.ParseInt(selfField.name, 10, 64)
+				if err != nil {
+					return err
+				}
+				if reflect.Zero(kType).OverflowInt(n) {
+					return &OverflowError{FullKeys: fks, TargetType: kType, Value: selfField.name}
+				}
+				kVal = reflect.ValueOf(n).Convert(kType)
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+				n, err := strconv.ParseUint(selfField.name, 10, 64)
+				if err != nil {
+					return err
+				}
+				if reflect.Zero(kType).OverflowUint(n) {
+					return &OverflowError{FullKeys: fks, TargetType: kType, Value: selfField.name}
+				}
+				kVal = reflect.ValueOf(n).Convert(kType)
+			case reflect.Float32, reflect.Float64:
+				n, err := strconv.ParseFloat(selfField.name, 64)
+				if err != nil {
+					return err
+				}
+				if reflect.Zero(kType).OverflowFloat(n) {
+					return &OverflowError{FullKeys: fks, TargetType: kType, Value: selfField.name}
+				}
+				kVal = reflect.ValueOf(n).Convert(kType)
+			default:
+				return errors.New("prototype: Unexpected key type")
+			}
 		}
+		if !kVal.IsValid() {
+			continue
+		}
+		tgtVal.SetMapIndex(kVal, vVal)
 	}
 	return nil
-}
-
-func struct2MapDominantFieldCloners(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, srcFields structFields, t reflect.Type, key string, opts *options) (reflect.Value, error) {
-	keyType := t.Key()
-	switch {
-	case reflect.PointerTo(keyType).Implements(textUnmarshalerType):
-		keyVal := reflect.New(keyType)
-		if textUnmarshaler, ok := keyVal.Interface().(encoding.TextUnmarshaler); ok {
-			if err := textUnmarshaler.UnmarshalText([]byte(key)); err != nil {
-				return reflect.Value{}, err
-			}
-		}
-		return keyVal.Elem(), nil
-	case keyType.Kind() == reflect.String:
-		return reflect.ValueOf(key).Convert(keyType), nil
-	default:
-		switch keyType.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			n, err := strconv.ParseInt(key, 10, 64)
-			if err != nil {
-				return reflect.Value{}, err
-			}
-			if reflect.Zero(keyType).OverflowInt(n) {
-				return reflect.Value{}, &OverflowError{FullKeys: fks, TargetType: keyType, Value: key}
-			}
-			return reflect.ValueOf(n).Convert(keyType), nil
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-			n, err := strconv.ParseUint(key, 10, 64)
-			if err != nil {
-				return reflect.Value{}, err
-			}
-			if reflect.Zero(keyType).OverflowUint(n) {
-				return reflect.Value{}, &OverflowError{FullKeys: fks, TargetType: keyType, Value: key}
-			}
-			return reflect.ValueOf(n).Convert(keyType), nil
-		}
-	}
-	return reflect.Value{}, errors.New("prototype: Unexpected key type") // should never occur
 }
 
 type reflectWithString struct {

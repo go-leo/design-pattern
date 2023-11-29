@@ -627,20 +627,53 @@ func TestStructCloner(t *testing.T) {
 		},
 		Msg:      "success",
 		Username: "Forest",
+		IsPass:   false,
 	}
-	var tgtAny any
-	tgtVal := reflect.ValueOf(&tgtAny)
 	srcVal := reflect.ValueOf(srcResponse)
-	err = structCloner(new(cloneContext), []string{}, tgtVal, srcVal, opts)
-	assert.NoError(t, err)
-	assert.EqualValues(t, tgtAny, &srcResponse)
 
 	var tgtResp Response
-	tgtVal = reflect.ValueOf(&tgtResp)
-	err = structCloner(new(cloneContext), []string{}, tgtVal, srcVal, opts)
+	tgtStructVal := reflect.ValueOf(&tgtResp)
+	err = structCloner(new(cloneContext), []string{}, tgtStructVal, srcVal, opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, &tgtResp, &srcResponse)
 
+	var tgtAny any
+	tgtAnyVal := reflect.ValueOf(&tgtAny)
+	err = structCloner(new(cloneContext), []string{}, tgtAnyVal, srcVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, tgtAny, map[string]any{
+		"Msg":      "success",
+		"Username": "Forest",
+		"IsPass":   false,
+		"Int":      int64(0),
+		"Code": map[string]any{
+			"Msg":  "ok",
+			"Code": int64(200),
+			"Error": map[string]any{
+				"Course": "Course",
+				"Msg":    "error msg",
+			},
+		},
+	})
+
+	var tgtMap map[string]any
+	tgtMapVal := reflect.ValueOf(&tgtMap)
+	err = structCloner(new(cloneContext), []string{}, tgtMapVal, srcVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, tgtAny, map[string]any{
+		"Msg":      "success",
+		"Username": "Forest",
+		"IsPass":   false,
+		"Int":      int64(0),
+		"Code": map[string]any{
+			"Msg":  "ok",
+			"Code": int64(200),
+			"Error": map[string]any{
+				"Course": "Course",
+				"Msg":    "error msg",
+			},
+		},
+	})
 }
 
 func TestSliceCloner(t *testing.T) {
