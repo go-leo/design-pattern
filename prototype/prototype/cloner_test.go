@@ -602,8 +602,9 @@ func TestStructCloner(t *testing.T) {
 
 	type Code struct {
 		*Error
-		Msg  string `json:"msg"`
-		Code int    `json:"code"`
+		Msg  string
+		Code int
+		//Details []string
 	}
 
 	type Int int
@@ -611,24 +612,27 @@ func TestStructCloner(t *testing.T) {
 	type Response struct {
 		Code
 		Int
-		Msg      string `json:"msg"`
-		Username string `json:"username"`
-		IsPass   bool   `json:"is_pass,omitempty"`
+		Msg      string
+		Username string
+		IsPass   bool
 	}
 
-	var srcResponse = Response{
-		Code: Code{
-			Error: &Error{
-				Course: "Course",
-				Msg:    "error msg",
+	var (
+		srcResponse = Response{
+			Code: Code{
+				Error: &Error{
+					Course: "Course",
+					Msg:    "error msg",
+				},
+				Msg:  "ok",
+				Code: 200,
+				//Details: []string{"fast", "slow"},
 			},
-			Msg:  "ok",
-			Code: 200,
-		},
-		Msg:      "success",
-		Username: "Forest",
-		IsPass:   false,
-	}
+			Msg:      "success",
+			Username: "Forest",
+			IsPass:   false,
+		}
+	)
 	srcVal := reflect.ValueOf(srcResponse)
 
 	var tgtResp Response
@@ -677,11 +681,28 @@ func TestStructCloner(t *testing.T) {
 }
 
 func TestSliceCloner(t *testing.T) {
+	opts := &options{
+		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
+		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
+		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
+		SourceTagKey: "",
+	}
+
 	var err error
+
+	var srcBytesSlice = []byte{'1', '2', 'a', 'b'}
+	var tgtString string
+	tgtStringVal := reflect.ValueOf(&tgtString)
+	srcBytesSliceVal := reflect.ValueOf(srcBytesSlice)
+	err = sliceCloner(new(cloneContext), []string{}, tgtStringVal, srcBytesSliceVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, "12ab", tgtString)
 
 	var srcBoolSlice = []bool{true, false, false, true}
 	var tgtBoolSlice []bool
-	err = sliceCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtBoolSlice), reflect.ValueOf(srcBoolSlice), new(options))
+	tgtBoolSliceVal := reflect.ValueOf(&tgtBoolSlice)
+	srcBoolSliceVal := reflect.ValueOf(srcBoolSlice)
+	err = sliceCloner(new(cloneContext), []string{}, tgtBoolSliceVal, srcBoolSliceVal, opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, tgtBoolSlice, srcBoolSlice)
 
@@ -694,19 +715,62 @@ func TestSliceCloner(t *testing.T) {
 	var tgtInt32Slice []int32
 	err = sliceCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtInt32Slice), reflect.ValueOf(srcInt16Slice), new(options))
 	assert.NoError(t, err)
-	assert.EqualValues(t, tgtInt32Slice, srcInt16Slice)
+	assert.ObjectsAreEqualValues(tgtInt32Slice, srcInt16Slice)
 
 	var srcUint16Slice = []uint16{0, math.MaxInt8, math.MaxInt16}
 	var tgtUint32Slice []uint32
 	err = sliceCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtUint32Slice), reflect.ValueOf(srcUint16Slice), new(options))
 	assert.NoError(t, err)
-	//assert.Eq(t, tgtUint32Slice, srcUint16Slice)
+	assert.ObjectsAreEqualValues(tgtUint32Slice, srcUint16Slice)
 
 	var srcStringSlice = []string{"1", "2", "3", "4"}
 	var tgtStringSlice []string
 	err = sliceCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtStringSlice), reflect.ValueOf(srcStringSlice), new(options))
 	assert.NoError(t, err)
 	assert.ObjectsAreEqualValues(tgtStringSlice, srcStringSlice)
+
+}
+
+func TestArrayCloner(t *testing.T) {
+	opts := &options{
+		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
+		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
+		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
+		SourceTagKey: "",
+	}
+
+	var err error
+
+	var srcBoolArray = [4]bool{true, false, false, true}
+	var tgtBoolArray [6]bool
+	tgtBoolArrayVal := reflect.ValueOf(&tgtBoolArray)
+	srcBoolArrayVal := reflect.ValueOf(srcBoolArray)
+	err = arrayCloner(new(cloneContext), []string{}, tgtBoolArrayVal, srcBoolArrayVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, tgtBoolArray[:4], srcBoolArray[:])
+
+	var srcInt16Array = [8]int16{math.MinInt16, math.MinInt8, math.MaxInt8, math.MaxInt16}
+	var tgtInt8Array [8]int8
+	err = arrayCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtInt8Array), reflect.ValueOf(srcInt16Array), new(options))
+	var ofErr *OverflowError
+	assert.ErrorAs(t, err, &ofErr)
+
+	var tgtInt32Array [2]int32
+	err = arrayCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtInt32Array), reflect.ValueOf(srcInt16Array), new(options))
+	assert.NoError(t, err)
+	assert.ObjectsAreEqualValues(tgtInt32Array, srcInt16Array[:2])
+
+	var srcUint16Array = [3]uint16{0, math.MaxInt8, math.MaxInt16}
+	var tgtUint32Array [3]uint32
+	err = arrayCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtUint32Array), reflect.ValueOf(srcUint16Array), new(options))
+	assert.NoError(t, err)
+	assert.ObjectsAreEqualValues(tgtUint32Array, srcUint16Array)
+
+	var srcStringArray = [6]string{"1", "2", "3", "4"}
+	var tgtStringArray [6]string
+	err = arrayCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtStringArray), reflect.ValueOf(srcStringArray), new(options))
+	assert.NoError(t, err)
+	assert.ObjectsAreEqualValues(tgtStringArray, srcStringArray)
 
 }
 

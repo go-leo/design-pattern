@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 type ClonerFunc func(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error
@@ -275,7 +276,7 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 	case reflect.Float32, reflect.Float64:
 		return struct2FloatCloner(e, fks, tgtVal, srcVal, opts, tv)
 	case reflect.String:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return struct2StringCloner(e, fks, tgtVal, srcVal, opts, tv)
 	case reflect.Slice:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.Struct:
@@ -290,7 +291,8 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 		switch t.Key().Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
-			reflect.String, reflect.Bool, reflect.Float32, reflect.Float64:
+			reflect.Float32, reflect.Float64,
+			reflect.String, reflect.Bool:
 			if tv.IsNil() {
 				tv.Set(reflect.MakeMap(t))
 			}
@@ -412,6 +414,18 @@ func struct2FloatCloner(e *cloneContext, fks []string, tgtVal reflect.Value, src
 		return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, 64)}
 	}
 	tv.SetFloat(f)
+	return nil
+}
+
+func struct2StringCloner(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value) error {
+	var s string
+	switch srcVal.Type() {
+	case sqlNullStringType:
+		s = srcVal.FieldByName("String").String()
+	default:
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	}
+	tv.SetString(s)
 	return nil
 }
 
@@ -549,16 +563,12 @@ func struct2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 			vVal = reflect.ValueOf(new(uint64))
 		case reflect.Float32, reflect.Float64:
 			vVal = reflect.ValueOf(new(float64))
+		case reflect.Slice, reflect.Array:
+			vVal = reflect.ValueOf(new([]any))
+		case reflect.Map, reflect.Struct:
+			vVal = reflect.ValueOf(new(map[string]any))
 		case reflect.Interface, reflect.Pointer:
 			vVal = reflect.New(srcType)
-		case reflect.Array:
-			vVal = reflect.ValueOf(new([]any))
-		case reflect.Map:
-			vVal = reflect.ValueOf(new(map[string]any))
-		case reflect.Slice:
-			vVal = reflect.ValueOf(new([]any))
-		case reflect.Struct:
-			vVal = reflect.ValueOf(new(map[string]any))
 		default:
 			return errors.New("prototype: Unexpected type")
 		}
@@ -663,50 +673,59 @@ func struct2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 	return nil
 }
 
-type reflectWithString struct {
-	k  reflect.Value
-	v  reflect.Value
-	ks string
+type kvPair struct {
+	kVal   reflect.Value
+	vVal   reflect.Value
+	keyStr string
 }
 
-func (w *reflectWithString) resolve() error {
-	if w.k.Kind() == reflect.String {
-		w.ks = w.k.String()
-		return nil
-	}
-	if tm, ok := w.k.Interface().(encoding.TextMarshaler); ok {
-		if w.k.Kind() == reflect.Pointer && w.k.IsNil() {
+func (p *kvPair) resolve() error {
+	if tm, ok := p.kVal.Interface().(encoding.TextMarshaler); ok {
+		if p.kVal.Kind() == reflect.Pointer && p.kVal.IsNil() {
 			return nil
 		}
 		buf, err := tm.MarshalText()
-		w.ks = string(buf)
+		p.keyStr = string(buf)
 		return err
 	}
-	switch w.k.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		w.ks = strconv.FormatInt(w.k.Int(), 10)
-		return nil
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		w.ks = strconv.FormatUint(w.k.Uint(), 10)
+	if str, ok := p.kVal.Interface().(fmt.Stringer); ok {
+		if p.kVal.Kind() == reflect.Pointer && p.kVal.IsNil() {
+			return nil
+		}
+		p.keyStr = str.String()
 		return nil
 	}
-	panic("unexpected map key type")
+	switch p.kVal.Kind() {
+	case reflect.String:
+		p.keyStr = p.kVal.String()
+		return nil
+	case reflect.Bool:
+		p.keyStr = strconv.FormatBool(p.kVal.Bool())
+		return nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		p.keyStr = strconv.FormatInt(p.kVal.Int(), 10)
+		return nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		p.keyStr = strconv.FormatUint(p.kVal.Uint(), 10)
+		return nil
+	case reflect.Float32, reflect.Float64:
+		p.keyStr = strconv.FormatFloat(p.kVal.Float(), 'f', -1, 64)
+		return nil
+	default:
+		return errors.New("unexpected map key type")
+	}
 }
 
 func mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	srcType := srcVal.Type()
-	switch srcType.Key().Kind() {
-	case reflect.String,
-		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-	default:
-		if !srcType.Key().Implements(textMarshalerType) {
-			return hookCloner(e, fks, tgtVal, srcVal, opts)
-		}
-	}
 	if srcVal.IsNil() {
 		return nil
 	}
+
+	scanner, tv := IndirectValue(tgtVal)
+	if scanner != nil {
+		return scanner.Scan(srcVal.Interface())
+	}
+
 	if e.forward(); e.isTooDeep() {
 		// We're a large number of nested ptrCloner.encode calls deep;
 		// start checking if we've run into a pointer cycle.
@@ -717,26 +736,120 @@ func mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 		e.remember(ptr)
 		defer e.forget(ptr)
 	}
+	defer e.back()
 
+	switch tv.Kind() {
+	case reflect.Struct:
+		return map2StructCloner(e, fks, tv, srcVal, opts)
+	case reflect.Interface:
+		if tv.NumMethod() == 0 {
+			return map2AnyCloner(e, fks, tv, srcVal, opts)
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	case reflect.Map:
+		if tv.IsNil() {
+			tv.Set(reflect.MakeMap(tv.Type()))
+		}
+		return map2MapCloner(e, fks, tv, srcVal, opts)
+	default:
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	}
+}
+
+func kvPairs(srcVal reflect.Value) ([]kvPair, error) {
 	// Extract and sort the keys.
-	sv := make([]reflectWithString, srcVal.Len())
-	mi := srcVal.MapRange()
-	for i := 0; mi.Next(); i++ {
-		sv[i].k = mi.Key()
-		sv[i].v = mi.Value()
-		if err := sv[i].resolve(); err != nil {
-			return fmt.Errorf("json: encoding error for type %q: %q", srcVal.Type().String(), err.Error())
+	kayValPairs := make([]kvPair, srcVal.Len())
+	mapIter := srcVal.MapRange()
+	for i := 0; mapIter.Next(); i++ {
+		kayValPairs[i].kVal = mapIter.Key()
+		kayValPairs[i].vVal = mapIter.Value()
+		if err := kayValPairs[i].resolve(); err != nil {
+			return nil, fmt.Errorf("prototype: map resolve error for type %q: %q", srcVal.Type().String(), err.Error())
 		}
 	}
-	sort.Slice(sv, func(i, j int) bool { return sv[i].ks < sv[j].ks })
+	sort.Slice(kayValPairs, func(i, j int) bool { return strings.Compare(kayValPairs[i].keyStr, kayValPairs[j].keyStr) < 0 })
+	return kayValPairs, nil
+}
 
-	cloner := typeCloner(srcType.Elem(), opts)
-	for _, kv := range sv {
-		if err := cloner(e, append(slices.Clone(fks), kv.ks), tgtVal, kv.v, opts); err != nil {
+func map2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	pairs, err := kvPairs(srcVal)
+	if err != nil {
+		return err
+	}
+	tgtType := tgtVal.Type()
+	elemType := tgtType.Elem()
+	var mapElem reflect.Value
+	for _, pair := range pairs {
+		if !mapElem.IsValid() {
+			mapElem = reflect.New(elemType).Elem()
+		} else {
+			mapElem.Set(reflect.Zero(elemType))
+		}
+		vVal := mapElem
+
+		valueCloner := typeCloner(pair.vVal.Type(), opts)
+		if err := valueCloner(e, append(slices.Clone(fks), pair.keyStr), vVal, pair.vVal, opts); err != nil {
 			return err
 		}
+
+		kType := tgtType.Key()
+		kVal := reflect.New(kType)
+		if err := valueCloner(e, append(slices.Clone(fks), pair.keyStr), kVal, pair.kVal, opts); err != nil {
+			return err
+		}
+		kVal = kVal.Elem()
+
+		if !kVal.IsValid() {
+			continue
+		}
+		tgtVal.SetMapIndex(kVal, vVal)
 	}
-	e.back()
+	return nil
+}
+
+func map2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	m := make(map[string]any)
+	pairs, err := kvPairs(srcVal)
+	if err != nil {
+		return err
+	}
+	for _, pair := range pairs {
+		valueCloner := typeCloner(pair.vVal.Type(), opts)
+
+		var vVal reflect.Value
+		switch pair.vVal.Kind() {
+		case reflect.String:
+			vVal = reflect.ValueOf(new(string))
+		case reflect.Bool:
+			vVal = reflect.ValueOf(new(bool))
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			vVal = reflect.ValueOf(new(int64))
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+			vVal = reflect.ValueOf(new(uint64))
+		case reflect.Float32, reflect.Float64:
+			vVal = reflect.ValueOf(new(float64))
+		case reflect.Slice, reflect.Array:
+			vVal = reflect.ValueOf(new([]any))
+		case reflect.Map, reflect.Struct:
+			vVal = reflect.ValueOf(new(map[string]any))
+		case reflect.Interface, reflect.Pointer:
+			vVal = reflect.New(pair.vVal.Type())
+		default:
+			return errors.New("prototype: Unexpected type")
+		}
+
+		if err := valueCloner(e, append(slices.Clone(fks), pair.keyStr), vVal, pair.vVal, opts); err != nil {
+			return err
+		}
+
+		m[pair.keyStr] = vVal.Elem().Interface()
+	}
+	tgtVal.Set(reflect.ValueOf(m))
+	return nil
+}
+
+func map2StructCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+
 	return nil
 }
 
@@ -748,6 +861,18 @@ func sliceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 	if !tgtVal.IsValid() {
 		return nil
 	}
+	srcType := srcVal.Type()
+	scanner, tv := IndirectValue(tgtVal)
+	if scanner != nil {
+		return scanner.Scan(srcVal.Interface())
+	}
+	if tv.Kind() == reflect.String && srcType.Elem().Kind() == reflect.Uint8 {
+		builder := strings.Builder{}
+		_, _ = builder.Write(srcVal.Bytes())
+		tv.Set(reflect.ValueOf(builder.String()))
+		return nil
+	}
+
 	if e.forward(); e.isTooDeep() {
 		// We're a large number of nested ptrCloner.encode calls deep;
 		// start checking if we've run into a pointer cycle.
@@ -763,18 +888,18 @@ func sliceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 		e.remember(ptr)
 		defer e.forget(ptr)
 	}
-	if err := arrayCloner(e, fks, tgtVal, srcVal, opts); err != nil {
-		return err
-	}
-	e.back()
-	return nil
+	defer e.back()
+	return arrayCloner(e, fks, tv, srcVal, opts)
 }
 
 func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
-	tv := indirect(tgtVal, false)
+	scanner, tv := IndirectValue(tgtVal)
+	if scanner != nil {
+		return scanner.Scan(srcVal.Interface())
+	}
 	switch tv.Kind() {
 	case reflect.Array, reflect.Slice:
 		srcLen := srcVal.Len()
@@ -782,7 +907,7 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 			tv.Set(reflect.MakeSlice(tv.Type(), srcLen, srcLen))
 			tv.SetLen(0)
 		}
-		elemEnc := typeCloner(tgtVal.Type().Elem(), opts)
+		elemEnc := typeCloner(tv.Type().Elem(), opts)
 		for i := 0; i < srcVal.Len(); i++ {
 			if tv.Kind() == reflect.Slice {
 				tv.SetLen(i + 1)
@@ -800,16 +925,16 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 		}
 		return nil
 	case reflect.Interface:
-		if tv.NumMethod() > 0 {
-			return hookCloner(e, fks, tgtVal, srcVal, opts)
+		if tv.NumMethod() == 0 {
+			return array2AnyCloner(e, fks, tv, srcVal, opts)
 		}
-		return anySliceClone(e, fks, tv, srcVal, opts)
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
-func anySliceClone(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func array2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	elemEnc := typeCloner(tgtVal.Type().Elem(), opts)
 	srcLen := srcVal.Len()
 	// 获取src的反射类型
@@ -846,11 +971,11 @@ func ptrCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 		e.remember(ptr)
 		defer e.forget(ptr)
 	}
+	defer e.back()
 	elemEnc := typeCloner(srcVal.Type().Elem(), opts)
 	if err := elemEnc(e, fks, tgtVal, srcVal.Elem(), opts); err != nil {
 		return err
 	}
-	e.back()
 	return nil
 }
 
