@@ -31,6 +31,7 @@ type structFields struct {
 	recessivesNameIndex     map[string][]int
 	recessivesFullNameIndex map[string]int
 	selfFields              []field
+	selfNameIndex           map[string]int
 }
 
 // byIndex sorts field by index sequence.
@@ -193,6 +194,8 @@ func typeFields(t reflect.Type, opts *options, tagKey string) structFields {
 		return byIndex(x).Less(i, j)
 	})
 
+	selfFields, selfNameIndex := selfNameIndex(t, opts, selfFields)
+
 	// 区分出主要字段和次要字段
 	dominants, recessives := divideFields(fields)
 	dominants, dominantsNameIndex := dominantsNameIndex(t, opts, dominants)
@@ -204,7 +207,19 @@ func typeFields(t reflect.Type, opts *options, tagKey string) structFields {
 		recessivesNameIndex:     recessivesNameIndex,
 		recessivesFullNameIndex: recessivesFullnameIndex,
 		selfFields:              selfFields,
+		selfNameIndex:           selfNameIndex,
 	}
+}
+
+func selfNameIndex(t reflect.Type, opts *options, fields []field) ([]field, map[string]int) {
+	// 对字段进行排序，按照索引顺序排序。
+	sort.Sort(byIndex(fields))
+	// 创建一个映射 nameIndex，用于通过字段名称查找字段在 fields 中的索引。
+	nameIndex := make(map[string]int, len(fields))
+	for i, field := range fields {
+		nameIndex[field.name] = i
+	}
+	return fields, nameIndex
 }
 
 // divideFields 分出主要字段和次要字段
@@ -272,15 +287,24 @@ func dominantsNameIndex(t reflect.Type, opts *options, fields []field) ([]field,
 }
 
 func findDominantField(tgtFields structFields, opts *options, tagName string) (field, bool) {
+	return findField(tgtFields.dominantsNameIndex, tgtFields.dominants, opts, tagName)
+}
+
+func findField(nameIndex map[string]int, fields []field, opts *options, tagName string) (field, bool) {
 	// 查找tgt字段
-	if tgtIdx, ok := tgtFields.dominantsNameIndex[tagName]; ok {
+	if tgtIdx, ok := nameIndex[tagName]; ok {
 		// 找到了一个完全匹配的字段名称
-		return tgtFields.dominants[tgtIdx], true
+		return fields[tgtIdx], true
 	} else {
 		// 代码回退到了一种更为耗时的线性搜索方法，该方法在进行字段名称匹配时不考虑大小写
-		for tgtKey, tgtIdx := range tgtFields.dominantsNameIndex {
-			if opts.EqualFold(tgtKey, tagName) {
-				return tgtFields.dominants[tgtIdx], true
+		for tgtKey, tgtIdx := range nameIndex {
+			if opts.EqualFold != nil && opts.EqualFold(tgtKey, tagName) {
+				return fields[tgtIdx], true
+			} else {
+				f := fields[tgtIdx]
+				if f.equalFold([]byte(tgtKey), []byte(tagName)) {
+					return f, true
+				}
 			}
 		}
 	}
@@ -299,13 +323,26 @@ func findRecessiveField(tgtFields structFields, opts *options, tagKey string) ([
 	} else {
 		// 代码回退到了一种更为耗时的线性搜索方法，该方法在进行字段名称匹配时不考虑大小写
 		for tgtKey, tgtIdxs := range tgtFields.recessivesNameIndex {
-			if opts.EqualFold(tgtKey, tagKey) {
+			if opts.EqualFold != nil && opts.EqualFold(tgtKey, tagKey) {
 				fields := make([]field, 0, len(tgtIdxs))
 				for _, tgtIdx := range tgtIdxs {
 					fields = append(fields, tgtFields.recessives[tgtIdx])
 				}
-				return fields, true
+				if len(fields) > 0 {
+					return fields, true
+				}
+			} else {
+				fields := make([]field, 0, len(tgtIdxs))
+				for _, field := range tgtFields.recessives {
+					if field.equalFold([]byte(tgtKey), []byte(tagKey)) {
+						fields = append(fields, field)
+					}
+				}
+				if len(fields) > 0 {
+					return fields, true
+				}
 			}
+
 		}
 	}
 	return nil, false

@@ -751,6 +751,13 @@ func mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 			tv.Set(reflect.MakeMap(tv.Type()))
 		}
 		return map2MapCloner(e, fks, tv, srcVal, opts)
+	case reflect.Pointer:
+		if tv.IsNil() {
+			tv.Set(reflect.New(tv.Type().Elem()))
+			tv = tv.Elem()
+			return mapCloner(e, fks, tv, srcVal, opts)
+		}
+		return hookCloner(e, fks, tv, srcVal, opts)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -787,14 +794,12 @@ func map2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, 
 		}
 		vVal := mapElem
 
-		valueCloner := typeCloner(pair.vVal.Type(), opts)
-		if err := valueCloner(e, append(slices.Clone(fks), pair.keyStr), vVal, pair.vVal, opts); err != nil {
+		if err := typeCloner(pair.vVal.Type(), opts)(e, append(slices.Clone(fks), pair.keyStr), vVal, pair.vVal, opts); err != nil {
 			return err
 		}
 
-		kType := tgtType.Key()
-		kVal := reflect.New(kType)
-		if err := valueCloner(e, append(slices.Clone(fks), pair.keyStr), kVal, pair.kVal, opts); err != nil {
+		kVal := reflect.New(tgtType.Key())
+		if err := typeCloner(pair.kVal.Type(), opts)(e, append(slices.Clone(fks), pair.keyStr), kVal, pair.kVal, opts); err != nil {
 			return err
 		}
 		kVal = kVal.Elem()
@@ -849,7 +854,24 @@ func map2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, 
 }
 
 func map2StructCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	pairs, err := kvPairs(srcVal)
+	if err != nil {
+		return err
+	}
+	tgtType := tgtVal.Type()
+	tgtFields := cachedTypeFields(tgtType, opts, opts.TargetTagKey)
 
+	for _, pair := range pairs {
+		tgtField, ok := findField(tgtFields.selfNameIndex, tgtFields.selfFields, opts, pair.keyStr)
+		if !ok {
+			continue
+		}
+		tVal := tgtVal.FieldByIndex(tgtField.index)
+		valueCloner := typeCloner(pair.vVal.Type(), opts)
+		if err := valueCloner(e, append(slices.Clone(fks), pair.keyStr), tVal, pair.vVal, opts); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -1005,5 +1027,5 @@ func hookCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 			return hook(fks, tgtVal, srcVal)
 		}
 	}
-	return &UnsupportedTypeError{Type: srcVal.Type()}
+	return &UnsupportedTypeError{SourceType: srcVal.Type(), TargetType: tgtVal.Type()}
 }

@@ -680,6 +680,105 @@ func TestStructCloner(t *testing.T) {
 	})
 }
 
+func TestMapCloner(t *testing.T) {
+	opts := &options{
+		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
+		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
+		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
+		SourceTagKey: "",
+	}
+
+	var err error
+	var tgtVal reflect.Value
+	var srcVal reflect.Value
+
+	srcMap := map[string]any{
+		"Msg":      "success",
+		"Username": "Forest",
+		"IsPass":   false,
+		"Int":      int64(0),
+		"Code": map[string]any{
+			"Msg":  "ok",
+			"Code": int64(200),
+			"Error": map[string]any{
+				"Course": "Course",
+				"Msg":    "error msg",
+			},
+		},
+	}
+	var tgtMap map[string]any
+	tgtVal = reflect.ValueOf(&tgtMap)
+	srcVal = reflect.ValueOf(srcMap)
+	err = mapCloner(new(cloneContext), []string{}, tgtVal, srcVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, tgtMap, srcMap)
+
+	var tgtAny any
+	tgtVal = reflect.ValueOf(&tgtAny)
+	srcVal = reflect.ValueOf(srcMap)
+	err = mapCloner(new(cloneContext), []string{}, tgtVal, srcVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, tgtMap, srcMap)
+
+	type Error struct {
+		Course string
+		Msg    string
+	}
+
+	type Code struct {
+		Error *Error
+		Msg   string
+		Code  int
+	}
+
+	type Int int
+
+	type Response struct {
+		Code     Code
+		Int      Int
+		Msg      string
+		Username string
+		IsPass   bool
+	}
+	var tgtStruct Response
+	tgtVal = reflect.ValueOf(&tgtStruct)
+	srcVal = reflect.ValueOf(srcMap)
+	err = mapCloner(new(cloneContext), []string{}, tgtVal, srcVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, tgtStruct, Response{
+		Code: Code{
+			Error: &Error{
+				Course: "Course",
+				Msg:    "error msg",
+			},
+			Msg:  "ok",
+			Code: 200,
+		},
+		Msg:      "success",
+		Username: "Forest",
+		IsPass:   false,
+	})
+
+	var tgtStructPointer *Response
+	tgtVal = reflect.ValueOf(&tgtStructPointer)
+	srcVal = reflect.ValueOf(srcMap)
+	err = mapCloner(new(cloneContext), []string{}, tgtVal, srcVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, *tgtStructPointer, Response{
+		Code: Code{
+			Error: &Error{
+				Course: "Course",
+				Msg:    "error msg",
+			},
+			Msg:  "ok",
+			Code: 200,
+		},
+		Msg:      "success",
+		Username: "Forest",
+		IsPass:   false,
+	})
+}
+
 func TestSliceCloner(t *testing.T) {
 	opts := &options{
 		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),

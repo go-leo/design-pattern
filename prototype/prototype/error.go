@@ -11,11 +11,12 @@ import (
 var ErrPhase = errors.New("JSON decoder out of sync - data changing underfoot?")
 
 type UnsupportedTypeError struct {
-	Type reflect.Type
+	SourceType reflect.Type
+	TargetType reflect.Type
 }
 
 func (e *UnsupportedTypeError) Error() string {
-	return "prototype: unsupported type: " + e.Type.String()
+	return "prototype: unsupported type: " + e.SourceType.String() + " to " + e.TargetType.String()
 }
 
 // An UnsupportedValueError is returned by Clone when attempting
