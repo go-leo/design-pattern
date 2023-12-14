@@ -27,7 +27,7 @@ var (
 	sqlNullTimeType    = reflect.TypeOf(sql.NullTime{})
 )
 
-func IndirectValue(v reflect.Value) (sql.Scanner, reflect.Value) {
+func indirectValue(v reflect.Value) (sql.Scanner, reflect.Value) {
 	for {
 		if v.Type().NumMethod() > 0 && v.CanInterface() {
 			if scanner, ok := v.Interface().(sql.Scanner); ok {

@@ -11,26 +11,6 @@ import (
 	"unicode/utf8"
 )
 
-func Unmarshal(data []byte, tgt any, opts *options) error {
-	var d decodeState
-	d.data = data
-	d.off = 0
-	return unmarshal(&d, tgt, opts)
-}
-
-func unmarshal(d *decodeState, tgt any, opts *options) error {
-	tgtVal := reflect.ValueOf(tgt)
-	if tgtVal.Kind() != reflect.Pointer || tgtVal.IsNil() {
-		return &InvalidTargetError{Type: reflect.TypeOf(tgt)}
-	}
-
-	d.scan.reset()
-	d.scanWhile(scanSkipSpace)
-	// We decode tgtVal not tgtVal.Elem because the Unmarshaler interface
-	// test must be applied at the top level of the value.
-	return value(d, tgtVal, opts)
-}
-
 // value consumes a JSON value from d.data[d.off-1:], decoding into v, and
 // reads the following byte ahead. If v is invalid, the value is discarded.
 // The first byte of the value has been read already.

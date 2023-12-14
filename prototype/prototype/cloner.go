@@ -23,7 +23,7 @@ func emptyValueCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 	if !tgtVal.IsValid() {
 		return nil
 	}
-	scanner, tv := IndirectValue(tgtVal)
+	scanner, tv := indirectValue(tgtVal)
 	if scanner != nil {
 		return scanner.Scan(nil)
 	}
@@ -49,7 +49,7 @@ func boolCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 		return nil
 	}
 	b := srcVal.Bool()
-	scanner, tv := IndirectValue(tgtVal)
+	scanner, tv := indirectValue(tgtVal)
 	if scanner != nil {
 		return scanner.Scan(b)
 	}
@@ -60,6 +60,13 @@ func boolCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 		if tv.NumMethod() == 0 {
 			tv.Set(reflect.ValueOf(b))
 			return nil
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	case reflect.Pointer:
+		if tv.IsNil() {
+			tv.Set(reflect.New(tv.Type().Elem()))
+			tv = tv.Elem()
+			return boolCloner(e, fks, tv, srcVal, opts)
 		}
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	default:
@@ -73,7 +80,7 @@ func intCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 		return nil
 	}
 	i := srcVal.Int()
-	scanner, tv := IndirectValue(tgtVal)
+	scanner, tv := indirectValue(tgtVal)
 	if scanner != nil {
 		return scanner.Scan(i)
 	}
@@ -109,6 +116,13 @@ func intCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.Struct:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	case reflect.Pointer:
+		if tv.IsNil() {
+			tv.Set(reflect.New(tv.Type().Elem()))
+			tv = tv.Elem()
+			return intCloner(e, fks, tv, srcVal, opts)
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -119,7 +133,7 @@ func uintCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 		return nil
 	}
 	u := srcVal.Uint()
-	scanner, tv := IndirectValue(tgtVal)
+	scanner, tv := indirectValue(tgtVal)
 	if scanner != nil {
 		return scanner.Scan(u)
 	}
@@ -153,19 +167,26 @@ func uintCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 			return nil
 		}
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	case reflect.Pointer:
+		if tv.IsNil() {
+			tv.Set(reflect.New(tv.Type().Elem()))
+			tv = tv.Elem()
+			return uintCloner(e, fks, tv, srcVal, opts)
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
 var (
-	float32Cloner = (floatCloner(32)).encode
-	float64Cloner = (floatCloner(64)).encode
+	float32Cloner = (floatCloner(32)).clone
+	float64Cloner = (floatCloner(64)).clone
 )
 
 type floatCloner int // number of bits
 
-func (bits floatCloner) encode(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func (bits floatCloner) clone(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
@@ -173,7 +194,7 @@ func (bits floatCloner) encode(e *cloneContext, fks []string, tgtVal, srcVal ref
 	if math.IsInf(f, 0) || math.IsNaN(f) {
 		return &UnsupportedValueError{Value: srcVal, Str: strconv.FormatFloat(f, 'g', -1, int(bits))}
 	}
-	scanner, tv := IndirectValue(tgtVal)
+	scanner, tv := indirectValue(tgtVal)
 	if scanner != nil {
 		return scanner.Scan(f)
 	}
@@ -213,6 +234,13 @@ func (bits floatCloner) encode(e *cloneContext, fks []string, tgtVal, srcVal ref
 			return nil
 		}
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	case reflect.Pointer:
+		if tv.IsNil() {
+			tv.Set(reflect.New(tv.Type().Elem()))
+			tv = tv.Elem()
+			return bits.clone(e, fks, tv, srcVal, opts)
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -223,7 +251,7 @@ func stringCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 		return nil
 	}
 	s := srcVal.String()
-	scanner, tv := IndirectValue(tgtVal)
+	scanner, tv := indirectValue(tgtVal)
 	if scanner != nil {
 		return scanner.Scan(s)
 	}
@@ -239,6 +267,13 @@ func stringCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 		if tv.NumMethod() == 0 {
 			tv.Set(reflect.ValueOf(s))
 			return nil
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	case reflect.Pointer:
+		if tv.IsNil() {
+			tv.Set(reflect.New(tv.Type().Elem()))
+			tv = tv.Elem()
+			return stringCloner(e, fks, tv, srcVal, opts)
 		}
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	default:
@@ -262,7 +297,7 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 	if !tgtVal.IsValid() {
 		return nil
 	}
-	scanner, tv := IndirectValue(tgtVal)
+	scanner, tv := indirectValue(tgtVal)
 	if scanner != nil {
 		return scanner.Scan(srcVal.Interface())
 	}
@@ -304,6 +339,13 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 				}
 				return struct2MapCloner(e, fks, tv, srcVal, opts)
 			}
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	case reflect.Pointer:
+		if tv.IsNil() {
+			tv.Set(reflect.New(tv.Type().Elem()))
+			tv = tv.Elem()
+			return structCloner(e, fks, tv, srcVal, opts)
 		}
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.Array:
@@ -721,7 +763,7 @@ func mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 		return nil
 	}
 
-	scanner, tv := IndirectValue(tgtVal)
+	scanner, tv := indirectValue(tgtVal)
 	if scanner != nil {
 		return scanner.Scan(srcVal.Interface())
 	}
@@ -884,7 +926,7 @@ func sliceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 		return nil
 	}
 	srcType := srcVal.Type()
-	scanner, tv := IndirectValue(tgtVal)
+	scanner, tv := indirectValue(tgtVal)
 	if scanner != nil {
 		return scanner.Scan(srcVal.Interface())
 	}
@@ -918,7 +960,7 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 	if !tgtVal.IsValid() {
 		return nil
 	}
-	scanner, tv := IndirectValue(tgtVal)
+	scanner, tv := indirectValue(tgtVal)
 	if scanner != nil {
 		return scanner.Scan(srcVal.Interface())
 	}
@@ -951,6 +993,13 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 			return array2AnyCloner(e, fks, tv, srcVal, opts)
 		}
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	case reflect.Pointer:
+		if tv.IsNil() {
+			tv.Set(reflect.New(tv.Type().Elem()))
+			tv = tv.Elem()
+			return arrayCloner(e, fks, tv, srcVal, opts)
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -959,23 +1008,20 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 func array2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	elemEnc := typeCloner(tgtVal.Type().Elem(), opts)
 	srcLen := srcVal.Len()
-	// 获取src的反射类型
-	srcType := srcVal.Type()
-	// 创建一个与src类型相同的切片类型
-	tgtType := reflect.SliceOf(srcType.Elem())
-	// 使用反射创建一个切片
-	tgtSlice := reflect.MakeSlice(tgtType, srcLen, srcLen)
+	// 创建一个切片
+	tgtSlice := make([]any, 0, srcLen)
 	// 将src的元素逐个拷贝到tgt
 	for i := 0; i < srcLen; i++ {
-		tgtItem := tgtSlice.Index(i)
-		srcItem := srcVal.Index(i)
-		if err := elemEnc(e, append(slices.Clone(fks), convx.ToString(i)), tgtItem, srcItem, opts); err != nil {
+		var tgtItem any
+		tgtItemVal := reflect.ValueOf(&tgtItem)
+		srcItemVal := srcVal.Index(i)
+		if err := elemEnc(e, append(slices.Clone(fks), convx.ToString(i)), tgtItemVal, srcItemVal, opts); err != nil {
 			return err
 		}
-		tgtSlice.Index(i).Set(tgtItem)
+		tgtSlice = append(tgtSlice, tgtItem)
 	}
 	// 设置tgtVal
-	tgtVal.Set(tgtSlice)
+	tgtVal.Set(reflect.ValueOf(tgtSlice))
 	return nil
 }
 
@@ -994,8 +1040,8 @@ func ptrCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 		defer e.forget(ptr)
 	}
 	defer e.back()
-	elemEnc := typeCloner(srcVal.Type().Elem(), opts)
-	if err := elemEnc(e, fks, tgtVal, srcVal.Elem(), opts); err != nil {
+	cloner := typeCloner(srcVal.Type().Elem(), opts)
+	if err := cloner(e, fks, tgtVal, srcVal.Elem(), opts); err != nil {
 		return err
 	}
 	return nil
