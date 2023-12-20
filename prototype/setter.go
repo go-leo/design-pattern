@@ -4,6 +4,7 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"time"
 )
 
 func setInt(fks []string, tgtVal reflect.Value, i int64) error {
@@ -75,4 +76,23 @@ func setAny(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.
 		return nil
 	}
 	return hookCloner(e, fks, tgtVal, srcVal, opts)
+}
+
+func setStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, v any) error {
+	switch v := v.(type) {
+	case bool:
+	case int64:
+	case uint:
+	case float64:
+	case string:
+	case []byte:
+
+	case time.Time:
+		if tgtVal.Type() == timeType {
+			tgtVal.Set(reflect.ValueOf(v))
+			return nil
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	}
+	return nil
 }

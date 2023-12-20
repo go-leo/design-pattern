@@ -34,6 +34,8 @@ var (
 	textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
 	scannerType         = reflect.TypeOf((*sql.Scanner)(nil)).Elem()
 
+	timeType = reflect.TypeOf(time.Time{})
+
 	sqlNullBoolType    = reflect.TypeOf(sql.NullBool{})
 	sqlNullByteType    = reflect.TypeOf(sql.NullByte{})
 	sqlNullInt16Type   = reflect.TypeOf(sql.NullInt16{})
@@ -42,8 +44,6 @@ var (
 	sqlNullFloat64Type = reflect.TypeOf(sql.NullFloat64{})
 	sqlNullStringType  = reflect.TypeOf(sql.NullString{})
 	sqlNullTimeType    = reflect.TypeOf(sql.NullTime{})
-
-	timeType = reflect.TypeOf(time.Time{})
 
 	wrappersPBDoubleType = reflect.TypeOf(wrapperspb.DoubleValue{})
 	wrappersPBFloatType  = reflect.TypeOf(wrapperspb.FloatValue{})
@@ -70,6 +70,11 @@ var (
 	structPBStructValueType = reflect.TypeOf(structpb.Value_StructValue{})
 	structPBListValueType   = reflect.TypeOf(structpb.Value_ListValue{})
 )
+
+//func init() {
+//	timestamp := timestamppb.New(time.Now())
+//	timestamp.
+//}
 
 var (
 	intKinds   = []reflect.Kind{reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64}

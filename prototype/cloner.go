@@ -104,6 +104,7 @@ bool ----> int(true:1, false:0)
 bool ----> uint(true:1, false:0)
 bool ----> float(true:1, false:0)
 bool ----> pointer
+bool ----> struct
 */
 func boolCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
@@ -131,6 +132,8 @@ func boolCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 		return setFloat(fks, tv, float64(boolMap[b]))
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, boolCloner)
+	case reflect.Struct:
+		return setStruct(e, fks, tv, srcVal, opts, b)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -146,6 +149,7 @@ int ----> float(i)
 int ----> bool(0->false, !0->true)
 int ----> string("i")
 int ----> pointer
+int ----> struct
 */
 func intCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
@@ -173,6 +177,8 @@ func intCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 		return nil
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, intCloner)
+	case reflect.Struct:
+		return setStruct(e, fks, tv, srcVal, opts, i)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -188,6 +194,7 @@ uint ----> float(u)
 uint ----> bool(0->false, !0->true)
 uint ----> string("u")
 uint ----> pointer
+uint ----> struct
 */
 func uintCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
@@ -215,6 +222,8 @@ func uintCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 		return nil
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, uintCloner)
+	case reflect.Struct:
+		return setStruct(e, fks, tv, srcVal, opts, u)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -230,6 +239,7 @@ float ----> uint(f)
 float ----> bool(0->false, !0->true)
 float ----> string("f")
 float ----> pointer
+float ----> struct
 */
 func floatCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
@@ -257,6 +267,8 @@ func floatCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 		return nil
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, floatCloner)
+	case reflect.Struct:
+		return setStruct(e, fks, tv, srcVal, opts, f)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -265,14 +277,15 @@ func floatCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 /*
 stringCloner 克隆float类型
 string ----> ClonerFrom
-string ----> string("s")
-string ----> []byte("s")
-string ----> any("s")
-string ----> bool("1", "t", "T", "true", "TRUE", "True"->false, "0", "f", "F", "false", "FALSE", "False"->true)
-string ----> int("s")
-string ----> uint("s")
-string ----> float("s")
+string ----> string
+string ----> []byte
+string ----> any(string)
+string ----> bool(strconv.ParseBool)
+string ----> int(strconv.ParseInt)
+string ----> uint(strconv.ParseUint)
+string ----> float(strconv.ParseFloat)
 string ----> pointer
+string ----> struct
 */
 func stringCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
@@ -322,6 +335,80 @@ func stringCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 		return setFloat(fks, tv, f)
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, stringCloner)
+	case reflect.Struct:
+		return setStruct(e, fks, tv, srcVal, opts, s)
+	default:
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	}
+}
+
+/*
+bytesCloner 克隆[]byte类型
+[]byte ----> ClonerFrom
+[]byte ----> []byte
+[]byte ----> string
+[]byte ----> any([]byte)
+string ----> bool(strconv.ParseBool)
+string ----> int(strconv.ParseInt)
+string ----> uint(strconv.ParseUint)
+string ----> float(strconv.ParseFloat)
+[]byte ----> pointer
+[]byte ----> struct
+*/
+func bytesCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	if !tgtVal.IsValid() {
+		return nil
+	}
+	bs := srcVal.Bytes()
+	cloner, tv := indirectValue(tgtVal)
+	if cloner != nil {
+		return cloner.CloneFrom(bs)
+	}
+	switch tv.Kind() {
+	case reflect.Slice:
+		if tv.Type().Elem().Kind() == reflect.Uint8 {
+			tv.SetBytes(bs)
+			return nil
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	case reflect.String:
+		tv.SetString(string(bs))
+		return nil
+	case reflect.Interface:
+		return setAny(e, fks, tgtVal, srcVal, opts, tv, bs)
+	case reflect.Bool:
+		s := string(bs)
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return newStringParseError(fks, tv.Type(), s, err)
+		}
+		tv.SetBool(b)
+		return nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		s := string(bs)
+		i, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return newStringParseError(fks, tv.Type(), s, err)
+		}
+		return setInt(fks, tv, i)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		s := string(bs)
+		u, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return newStringParseError(fks, tv.Type(), s, err)
+		}
+		return setUint(fks, tv, u)
+	case reflect.Float32, reflect.Float64:
+		s := string(bs)
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return newStringParseError(fks, tv.Type(), s, err)
+		}
+		return setFloat(fks, tv, f)
+	case reflect.Pointer:
+		return setPointer(e, fks, tgtVal, srcVal, opts, tv, stringCloner)
+	case reflect.Struct:
+		return setStruct(e, fks, tv, srcVal, opts, bs)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -350,11 +437,7 @@ func timeCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 	}
 	switch tv.Kind() {
 	case reflect.Struct:
-		if tv.Type() == timeType {
-			tv.Set(reflect.ValueOf(t))
-			return nil
-		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return setStruct(e, fks, tv, srcVal, opts, t)
 	case reflect.Interface:
 		return setAny(e, fks, tgtVal, srcVal, opts, tv, t)
 	case reflect.String:
@@ -401,6 +484,9 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 	}
 
 	switch srcVal.Type() {
+	case timeType:
+		return timeCloner(e, fks, tgtVal, srcVal, opts)
+
 	case sqlNullBoolType:
 		return boolCloner(e, fks, tgtVal, srcVal.FieldByName("Bool"), opts)
 	case sqlNullByteType:
@@ -417,6 +503,20 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 		return stringCloner(e, fks, tgtVal, srcVal.FieldByName("String"), opts)
 	case sqlNullTimeType:
 		return timeCloner(e, fks, tgtVal, srcVal.FieldByName("Time"), opts)
+
+	case wrappersPBBoolType:
+		return boolCloner(e, fks, tgtVal, srcVal.FieldByName("Value"), opts)
+	case wrappersPBInt32Type, wrappersPBInt64Type:
+		return intCloner(e, fks, tgtVal, srcVal.FieldByName("Value"), opts)
+	case wrappersPBUint32Type, wrappersPBUint64Type:
+		return uintCloner(e, fks, tgtVal, srcVal.FieldByName("Value"), opts)
+	case wrappersPBFloatType, wrappersPBDoubleType:
+		return floatCloner(e, fks, tgtVal, srcVal.FieldByName("Value"), opts)
+	case wrappersPBStringType:
+		return stringCloner(e, fks, tgtVal, srcVal.FieldByName("Value"), opts)
+	case wrappersPBBytesType:
+		return sliceCloner(e, fks, tgtVal, srcVal.FieldByName("Value"), opts)
+
 	default:
 		cloner, tv := indirectValue(tgtVal)
 		if cloner != nil {
@@ -890,22 +990,19 @@ func map2StructCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 
 // sliceCloner just wraps an arrayCloner, checking to make sure the value isn't nil.
 func sliceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	srcType := srcVal.Type()
+	if srcType.Elem().Kind() == reflect.Uint8 {
+		return bytesCloner(e, fks, tgtVal, srcVal, opts)
+	}
 	if srcVal.IsNil() {
 		return nil
 	}
 	if !tgtVal.IsValid() {
 		return nil
 	}
-	srcType := srcVal.Type()
 	cloner, tv := indirectValue(tgtVal)
 	if cloner != nil {
 		return cloner.CloneFrom(srcVal.Interface())
-	}
-	if tv.Kind() == reflect.String && srcType.Elem().Kind() == reflect.Uint8 {
-		builder := strings.Builder{}
-		_, _ = builder.Write(srcVal.Bytes())
-		tv.Set(reflect.ValueOf(builder.String()))
-		return nil
 	}
 
 	if e.forward(); e.isTooDeep() {
