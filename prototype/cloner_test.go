@@ -10,51 +10,77 @@ import (
 	"time"
 )
 
-type ScannerStruct struct {
-	Nil    string
-	Bool   bool
-	Int    int64
-	Uint   uint64
-	Float  float64
-	String string
-}
+type testClonerFromString string
 
-func (s *ScannerStruct) CloneFrom(src any) error {
-	switch v := src.(type) {
-	case nil:
-		s.Nil = "nil"
-	case bool:
-		s.Bool = v
-	case int64:
-		s.Int = v
-	case uint64:
-		s.Uint = v
-	case float64:
-		s.Float = v
-	case string:
-		s.String = v
-	}
-	return nil
-}
-
-type ScannerString string
-
-func (s *ScannerString) CloneFrom(src any) error {
+func (s *testClonerFromString) CloneFrom(src any) error {
 	switch v := src.(type) {
 	case nil:
 		*s = "nil"
 	case bool:
-		*s = ScannerString(strconv.FormatBool(v))
+		*s = testClonerFromString(strconv.FormatBool(v))
 	case int64:
-		*s = ScannerString(strconv.FormatInt(v, 10))
+		*s = testClonerFromString(strconv.FormatInt(v, 10))
 	case uint64:
-		*s = ScannerString(strconv.FormatUint(v, 10))
+		*s = testClonerFromString(strconv.FormatUint(v, 10))
 	case float64:
-		*s = ScannerString(strconv.FormatFloat(v, 'g', -1, 64))
+		*s = testClonerFromString(strconv.FormatFloat(v, 'g', -1, 64))
 	case string:
-		*s = ScannerString(v)
+		*s = testClonerFromString(v)
 	}
 	return nil
+}
+
+func TestClonerFrom(t *testing.T) {
+	opts := &options{
+		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
+		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
+		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
+		SourceTagKey: "",
+	}
+
+	var err error
+	var tgtIClonerFromString testClonerFromString
+
+	srcBool := true
+	tgtIClonerFromString = ""
+	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIClonerFromString), reflect.ValueOf(srcBool), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, strconv.FormatBool(srcBool), tgtIClonerFromString)
+
+	var srcInt = math.MaxInt
+	tgtIClonerFromString = ""
+	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIClonerFromString), reflect.ValueOf(srcInt), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, strconv.FormatInt(int64(srcInt), 10), tgtIClonerFromString)
+
+	var srcUint uint = math.MaxUint
+	tgtIClonerFromString = ""
+	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIClonerFromString), reflect.ValueOf(srcUint), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, strconv.FormatUint(uint64(srcUint), 10), string(tgtIClonerFromString))
+
+	var srcFloat32 float32 = math.MaxFloat32
+	tgtIClonerFromString = ""
+	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIClonerFromString), reflect.ValueOf(srcFloat32), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, strconv.FormatFloat(float64(srcFloat32), 'g', -1, 64), tgtIClonerFromString)
+
+	var srcFloat64 = math.MaxFloat64
+	tgtIClonerFromString = ""
+	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIClonerFromString), reflect.ValueOf(srcFloat64), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, strconv.FormatFloat(srcFloat64, 'g', -1, 64), tgtIClonerFromString)
+
+	var srcString = "hello prototype"
+	tgtIClonerFromString = ""
+	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIClonerFromString), reflect.ValueOf(srcString), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcString, tgtIClonerFromString)
+
+}
+
+func TestClonerTo(t *testing.T) {
+
 }
 
 func TestBoolCloner(t *testing.T) {
@@ -89,38 +115,6 @@ func TestBoolCloner(t *testing.T) {
 	var utErr *UnsupportedTypeError
 	assert.ErrorAs(t, err, &utErr)
 	assert.Equal(t, nil, tgtErr)
-
-	var tgtIScannerStruct ClonerFrom = new(ScannerStruct)
-	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIScannerStruct), reflect.ValueOf(srcBool), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, &ScannerStruct{Bool: srcBool}, tgtIScannerStruct)
-
-	var tgtIScannerString ClonerFrom = new(ScannerString)
-	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIScannerString), reflect.ValueOf(srcBool), opts)
-	assert.NoError(t, err)
-	scannerString := ScannerString(strconv.FormatBool(srcBool))
-	assert.Equal(t, &scannerString, tgtIScannerString)
-
-	var tgtScannerStruct = ScannerStruct{}
-	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStruct), reflect.ValueOf(srcBool), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, ScannerStruct{Bool: srcBool}, tgtScannerStruct)
-
-	var tgtScannerString = ScannerString("")
-	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerString), reflect.ValueOf(srcBool), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, ScannerString(strconv.FormatBool(srcBool)), tgtScannerString)
-
-	var tgtScannerStructPtr = &ScannerStruct{}
-	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStructPtr), reflect.ValueOf(srcBool), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, &ScannerStruct{Bool: srcBool}, tgtScannerStructPtr)
-
-	var tgtScannerStringPtr = new(ScannerString)
-	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStringPtr), reflect.ValueOf(srcBool), opts)
-	assert.NoError(t, err)
-	scannerString = ScannerString(strconv.FormatBool(srcBool))
-	assert.Equal(t, &scannerString, tgtScannerStringPtr)
 
 }
 
@@ -161,39 +155,6 @@ func TestIntCloner(t *testing.T) {
 	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAny), reflect.ValueOf(srcInt), opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, srcInt, tgtAny)
-
-	var tgtIScannerStruct ClonerFrom = new(ScannerStruct)
-	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIScannerStruct), reflect.ValueOf(srcInt), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, &ScannerStruct{Int: int64(srcInt)}, tgtIScannerStruct)
-
-	var tgtIScannerString ClonerFrom = new(ScannerString)
-	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIScannerString), reflect.ValueOf(srcInt), opts)
-	assert.NoError(t, err)
-	scannerString := ScannerString(strconv.Itoa(srcInt))
-	assert.Equal(t, &scannerString, tgtIScannerString)
-
-	var tgtScannerStruct = ScannerStruct{}
-	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStruct), reflect.ValueOf(srcInt), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, ScannerStruct{Int: int64(srcInt)}, tgtScannerStruct)
-
-	var tgtScannerString = ScannerString("")
-	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerString), reflect.ValueOf(srcInt), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, ScannerString(strconv.Itoa(srcInt)), tgtScannerString)
-
-	var tgtScannerStructPtr = &ScannerStruct{}
-	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStructPtr), reflect.ValueOf(srcInt), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, &ScannerStruct{Int: int64(srcInt)}, tgtScannerStructPtr)
-
-	var tgtScannerStringPtr = new(ScannerString)
-	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStringPtr), reflect.ValueOf(srcInt), opts)
-	assert.NoError(t, err)
-	scannerString = ScannerString(strconv.Itoa(srcInt))
-	assert.Equal(t, &scannerString, tgtScannerStringPtr)
-
 }
 
 func TestUIntCloner(t *testing.T) {
@@ -233,38 +194,6 @@ func TestUIntCloner(t *testing.T) {
 	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAny), reflect.ValueOf(srcUint), opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, srcUint, tgtAny)
-
-	var tgtIScannerStruct ClonerFrom = new(ScannerStruct)
-	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIScannerStruct), reflect.ValueOf(srcUint), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, &ScannerStruct{Uint: uint64(srcUint)}, tgtIScannerStruct)
-
-	var tgtIScannerString ClonerFrom = new(ScannerString)
-	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIScannerString), reflect.ValueOf(srcUint), opts)
-	assert.NoError(t, err)
-	scannerString := ScannerString(strconv.FormatUint(uint64(srcUint), 10))
-	assert.Equal(t, &scannerString, tgtIScannerString)
-
-	var tgtScannerStruct = ScannerStruct{}
-	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStruct), reflect.ValueOf(srcUint), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, ScannerStruct{Uint: uint64(srcUint)}, tgtScannerStruct)
-
-	var tgtScannerString = ScannerString("")
-	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerString), reflect.ValueOf(srcUint), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, ScannerString(strconv.FormatUint(uint64(srcUint), 10)), tgtScannerString)
-
-	var tgtScannerStructPtr = &ScannerStruct{}
-	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStructPtr), reflect.ValueOf(srcUint), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, &ScannerStruct{Uint: uint64(srcUint)}, tgtScannerStructPtr)
-
-	var tgtScannerStringPtr = new(ScannerString)
-	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStringPtr), reflect.ValueOf(srcUint), opts)
-	assert.NoError(t, err)
-	scannerString = ScannerString(strconv.FormatUint(uint64(srcUint), 10))
-	assert.Equal(t, &scannerString, tgtScannerStringPtr)
 }
 
 func TestFloat32Cloner(t *testing.T) {
@@ -304,38 +233,6 @@ func TestFloat32Cloner(t *testing.T) {
 	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAny), reflect.ValueOf(srcFloat32), opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, srcFloat32, tgtAny)
-
-	var tgtIScannerStruct ClonerFrom = new(ScannerStruct)
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIScannerStruct), reflect.ValueOf(srcFloat32), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, &ScannerStruct{Float: float64(srcFloat32)}, tgtIScannerStruct)
-
-	var tgtIScannerString ClonerFrom = new(ScannerString)
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIScannerString), reflect.ValueOf(srcFloat32), opts)
-	assert.NoError(t, err)
-	scannerString := ScannerString(strconv.FormatFloat(float64(srcFloat32), 'g', -1, 32))
-	assert.Equal(t, &scannerString, tgtIScannerString)
-
-	var tgtScannerStruct = ScannerStruct{}
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStruct), reflect.ValueOf(srcFloat32), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, ScannerStruct{Float: float64(srcFloat32)}, tgtScannerStruct)
-
-	var tgtScannerString = ScannerString("")
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerString), reflect.ValueOf(srcFloat32), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, ScannerString(strconv.FormatFloat(float64(srcFloat32), 'g', -1, 32)), tgtScannerString)
-
-	var tgtScannerStructPtr = &ScannerStruct{}
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStructPtr), reflect.ValueOf(srcFloat32), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, &ScannerStruct{Float: float64(srcFloat32)}, tgtScannerStructPtr)
-
-	var tgtScannerStringPtr = new(ScannerString)
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStringPtr), reflect.ValueOf(srcFloat32), opts)
-	assert.NoError(t, err)
-	scannerString = ScannerString(strconv.FormatFloat(float64(srcFloat32), 'g', -1, 32))
-	assert.Equal(t, &scannerString, tgtScannerStringPtr)
 }
 
 func TestFloat64Cloner(t *testing.T) {
@@ -375,38 +272,6 @@ func TestFloat64Cloner(t *testing.T) {
 	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAny), reflect.ValueOf(srcFloat64), opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, srcFloat64, tgtAny)
-
-	var tgtIScannerStruct ClonerFrom = new(ScannerStruct)
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIScannerStruct), reflect.ValueOf(srcFloat64), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, &ScannerStruct{Float: srcFloat64}, tgtIScannerStruct)
-
-	var tgtIScannerString ClonerFrom = new(ScannerString)
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIScannerString), reflect.ValueOf(srcFloat64), opts)
-	assert.NoError(t, err)
-	scannerString := ScannerString(strconv.FormatFloat(srcFloat64, 'g', -1, 64))
-	assert.Equal(t, &scannerString, tgtIScannerString)
-
-	var tgtScannerStruct = ScannerStruct{}
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStruct), reflect.ValueOf(srcFloat64), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, ScannerStruct{Float: float64(srcFloat64)}, tgtScannerStruct)
-
-	var tgtScannerString = ScannerString("")
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerString), reflect.ValueOf(srcFloat64), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, ScannerString(strconv.FormatFloat(float64(srcFloat64), 'g', -1, 64)), tgtScannerString)
-
-	var tgtScannerStructPtr = &ScannerStruct{}
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStructPtr), reflect.ValueOf(srcFloat64), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, &ScannerStruct{Float: float64(srcFloat64)}, tgtScannerStructPtr)
-
-	var tgtScannerStringPtr = new(ScannerString)
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStringPtr), reflect.ValueOf(srcFloat64), opts)
-	assert.NoError(t, err)
-	scannerString = ScannerString(strconv.FormatFloat(float64(srcFloat64), 'g', -1, 64))
-	assert.Equal(t, &scannerString, tgtScannerStringPtr)
 }
 
 func TestStringCloner(t *testing.T) {
@@ -435,38 +300,6 @@ func TestStringCloner(t *testing.T) {
 	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAny), reflect.ValueOf(srcString), opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, tgtAny, srcString)
-
-	var tgtIScannerStruct ClonerFrom = new(ScannerStruct)
-	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIScannerStruct), reflect.ValueOf(srcString), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, &ScannerStruct{String: srcString}, tgtIScannerStruct)
-
-	var tgtIScannerString ClonerFrom = new(ScannerString)
-	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIScannerString), reflect.ValueOf(srcString), opts)
-	assert.NoError(t, err)
-	scannerString := ScannerString(srcString)
-	assert.Equal(t, &scannerString, tgtIScannerString)
-
-	var tgtScannerStruct = ScannerStruct{}
-	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStruct), reflect.ValueOf(srcString), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, ScannerStruct{String: srcString}, tgtScannerStruct)
-
-	var tgtScannerString = ScannerString("")
-	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerString), reflect.ValueOf(srcString), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, ScannerString(srcString), tgtScannerString)
-
-	var tgtScannerStructPtr = &ScannerStruct{}
-	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStructPtr), reflect.ValueOf(srcString), opts)
-	assert.NoError(t, err)
-	assert.Equal(t, &ScannerStruct{String: srcString}, tgtScannerStructPtr)
-
-	var tgtScannerStringPtr = new(ScannerString)
-	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtScannerStringPtr), reflect.ValueOf(srcString), opts)
-	assert.NoError(t, err)
-	scannerString = ScannerString(srcString)
-	assert.Equal(t, &scannerString, tgtScannerStringPtr)
 }
 
 func TestTimeCloner(t *testing.T) {

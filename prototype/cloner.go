@@ -22,12 +22,50 @@ func clonerByValue(srcVal reflect.Value, opts *options) clonerFunc {
 			return nil
 		}
 	}
-	return clonerByType(srcVal.Type(), opts)
+	return clonerByType(srcVal.Type(), true, opts)
+}
+
+// newCondAddrEncoder returns an encoder that checks whether its value
+// CanAddr and delegates to canAddrEnc if so, else to elseEnc.
+func newCondAddrEncoder(canAddrEnc, elseEnc clonerFunc) clonerFunc {
+	return func(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+		if srcVal.CanAddr() {
+			return canAddrEnc(e, fks, tgtVal, srcVal, opts)
+		} else {
+			return elseEnc(e, fks, tgtVal, srcVal, opts)
+		}
+	}
+}
+
+func clonerToCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	if srcVal.Kind() == reflect.Pointer && srcVal.IsNil() {
+		return nil
+	}
+	if cloner, ok := srcVal.Interface().(ClonerTo); ok {
+		return cloner.CloneTo(tgtVal)
+	}
+	return nil
+}
+
+func addrClonerToCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	srcAddr := srcVal.Addr()
+	if srcAddr.IsNil() {
+		return nil
+	}
+	if cloner, ok := srcAddr.Interface().(ClonerTo); ok {
+		return cloner.CloneTo(tgtVal)
+	}
+	return nil
 }
 
 // clonerByType 基于 reflect.Type 获取 clonerFunc
-func clonerByType(srcType reflect.Type, opts *options) clonerFunc {
-
+func clonerByType(srcType reflect.Type, allowAddr bool, opts *options) clonerFunc {
+	if srcType.Kind() != reflect.Pointer && allowAddr && reflect.PointerTo(srcType).Implements(clonerToType) {
+		return newCondAddrEncoder(addrClonerToCloner, clonerByType(srcType, false, opts))
+	}
+	if srcType.Implements(clonerToType) {
+		return clonerToCloner
+	}
 	switch srcType.Kind() {
 	case reflect.Bool:
 		return boolCloner
@@ -769,12 +807,12 @@ func map2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, 
 		}
 		vVal := mapElem
 
-		if err := clonerByType(pair.vVal.Type(), opts)(e, append(slices.Clone(fks), pair.keyStr), vVal, pair.vVal, opts); err != nil {
+		if err := clonerByType(pair.vVal.Type(), true, opts)(e, append(slices.Clone(fks), pair.keyStr), vVal, pair.vVal, opts); err != nil {
 			return err
 		}
 
 		kVal := reflect.New(tgtType.Key())
-		if err := clonerByType(pair.kVal.Type(), opts)(e, append(slices.Clone(fks), pair.keyStr), kVal, pair.kVal, opts); err != nil {
+		if err := clonerByType(pair.kVal.Type(), true, opts)(e, append(slices.Clone(fks), pair.keyStr), kVal, pair.kVal, opts); err != nil {
 			return err
 		}
 		kVal = kVal.Elem()
@@ -794,7 +832,7 @@ func map2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, 
 		return err
 	}
 	for _, pair := range pairs {
-		valueCloner := clonerByType(pair.vVal.Type(), opts)
+		valueCloner := clonerByType(pair.vVal.Type(), true, opts)
 
 		var vVal reflect.Value
 		switch pair.vVal.Kind() {
@@ -842,7 +880,7 @@ func map2StructCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 			continue
 		}
 		tVal := tgtVal.FieldByIndex(tgtField.index)
-		valueCloner := clonerByType(pair.vVal.Type(), opts)
+		valueCloner := clonerByType(pair.vVal.Type(), true, opts)
 		if err := valueCloner(e, append(slices.Clone(fks), pair.keyStr), tVal, pair.vVal, opts); err != nil {
 			return err
 		}
@@ -904,7 +942,7 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 			tv.Set(reflect.MakeSlice(tv.Type(), srcLen, srcLen))
 			tv.SetLen(0)
 		}
-		elemCloner := clonerByType(srcVal.Type().Elem(), opts)
+		elemCloner := clonerByType(srcVal.Type().Elem(), true, opts)
 		for i := 0; i < srcVal.Len(); i++ {
 			if tv.Kind() == reflect.Slice {
 				tv.SetLen(i + 1)
@@ -939,7 +977,7 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 }
 
 func array2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	elemEnc := clonerByType(tgtVal.Type().Elem(), opts)
+	elemEnc := clonerByType(tgtVal.Type().Elem(), true, opts)
 	srcLen := srcVal.Len()
 	// 创建一个切片
 	tgtSlice := make([]any, 0, srcLen)
@@ -984,7 +1022,7 @@ func ptrCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 		defer e.forget(ptr)
 	}
 	defer e.back()
-	cloner := clonerByType(srcVal.Type().Elem(), opts)
+	cloner := clonerByType(srcVal.Type().Elem(), true, opts)
 	if err := cloner(e, fks, tgtVal, srcVal.Elem(), opts); err != nil {
 		return err
 	}

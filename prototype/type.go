@@ -14,17 +14,19 @@ import (
 	"time"
 )
 
-// ClonerFrom 自定义克隆
+// ClonerFrom 自定义克隆方法，从源克隆到自己
 type ClonerFrom interface {
 	CloneFrom(src any) error
 }
 
+// ClonerTo 自定义克隆方法，将自己克隆到目标
 type ClonerTo interface {
 	CloneTo(tgt any) error
 }
 
 var (
-	clonerType = reflect.TypeOf((*ClonerFrom)(nil)).Elem()
+	clonerFromType = reflect.TypeOf((*ClonerFrom)(nil)).Elem()
+	clonerToType   = reflect.TypeOf((*ClonerTo)(nil)).Elem()
 
 	textMarshalerType = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
 	stringerType      = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()

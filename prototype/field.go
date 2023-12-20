@@ -146,7 +146,7 @@ func typeFields(t reflect.Type, opts *options, tagKey string) structFields {
 					tag:        tagged,
 					index:      index,
 					typ:        ft,
-					clonerFunc: clonerByType(typeByIndex(t, index), opts),
+					clonerFunc: clonerByType(typeByIndex(t, index), true, opts),
 					fullName:   fullName(f, name, sf),
 				}
 				if t == f.typ {
