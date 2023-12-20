@@ -4,6 +4,12 @@ import (
 	"database/sql"
 	"encoding"
 	"fmt"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	"reflect"
 	"time"
 )
@@ -36,6 +42,31 @@ var (
 	sqlNullTimeType    = reflect.TypeOf(sql.NullTime{})
 
 	timeType = reflect.TypeOf(time.Time{})
+
+	wrappersPBDoubleType = reflect.TypeOf(wrapperspb.DoubleValue{})
+	wrappersPBFloatType  = reflect.TypeOf(wrapperspb.FloatValue{})
+	wrappersPBInt32Type  = reflect.TypeOf(wrapperspb.Int32Value{})
+	wrappersPBInt64Type  = reflect.TypeOf(wrapperspb.Int64Value{})
+	wrappersPBUint32Type = reflect.TypeOf(wrapperspb.UInt32Value{})
+	wrappersPBUint64Type = reflect.TypeOf(wrapperspb.UInt64Value{})
+	wrappersPBBoolType   = reflect.TypeOf(wrapperspb.BoolValue{})
+	wrappersPBStringType = reflect.TypeOf(wrapperspb.StringValue{})
+	wrappersPBBytesType  = reflect.TypeOf(wrapperspb.BytesValue{})
+
+	timestampPBTimestampType = reflect.TypeOf(timestamppb.Timestamp{})
+	durationPBDurationType   = reflect.TypeOf(durationpb.Duration{})
+
+	anyPBAnyType     = reflect.TypeOf(anypb.Any{})
+	emptyPBEmptyType = reflect.TypeOf(emptypb.Empty{})
+
+	structPBStructType      = reflect.TypeOf(structpb.Struct{})
+	structPBValueType       = reflect.TypeOf(structpb.Value{})
+	structPBNullValueType   = reflect.TypeOf(structpb.Value_NullValue{})
+	structPBNumberValueType = reflect.TypeOf(structpb.Value_NumberValue{})
+	structPBStringValueType = reflect.TypeOf(structpb.Value_StringValue{})
+	structPBBoolValueType   = reflect.TypeOf(structpb.Value_BoolValue{})
+	structPBStructValueType = reflect.TypeOf(structpb.Value_StructValue{})
+	structPBListValueType   = reflect.TypeOf(structpb.Value_ListValue{})
 )
 
 var (

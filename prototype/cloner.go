@@ -27,6 +27,7 @@ func clonerByValue(srcVal reflect.Value, opts *options) clonerFunc {
 
 // clonerByType 基于 reflect.Type 获取 clonerFunc
 func clonerByType(srcType reflect.Type, opts *options) clonerFunc {
+
 	switch srcType.Kind() {
 	case reflect.Bool:
 		return boolCloner
