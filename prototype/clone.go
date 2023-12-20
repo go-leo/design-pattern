@@ -1,29 +1,36 @@
 package prototype
 
-type options struct {
-	Copy          func(tgt any, src any) error
-	BoolConverter BoolConverter
-}
+import (
+	"reflect"
+)
 
-type Option func(o *options)
-
-func Copy(f func(tgt any, src any) error) Option {
-	return func(o *options) {
-		o.Copy = f
-	}
-}
-
+// Clone 将值从 src 克隆到 tgt
 func Clone(tgt any, src any, opts ...Option) error {
-	o := &options{}
-	for _, option := range opts {
-		option(o)
+	// 获取目标值的反射值
+	tgtVal := reflect.ValueOf(tgt)
+	// 如果目标不是一个指针或者为nil，返回错误
+	if tgtVal.Kind() != reflect.Pointer {
+		return newNonPointerError(reflect.TypeOf(tgt))
 	}
-	if o.Copy != nil {
-		return o.Copy(tgt, src)
+	if tgtVal.IsNil() {
+		return newNilError(reflect.TypeOf(tgt))
 	}
-	return clone(tgt, src, o)
+
+	// 获取原值的反射值
+	srcVal := reflect.ValueOf(src)
+
+	// 从对象池中获取克隆状态上下文
+	ctx := newCloneContext()
+	// 克隆结束后，将克隆状态上下文放入对象池中
+	defer freeCloneContext(ctx)
+
+	// 初始化options
+	o := new(options).apply(opts...).correct()
+
+	// 处理对象克隆逻辑
+	return clone(ctx, tgtVal, srcVal, o)
 }
 
-func clone(tgt any, src any, opt *options) (err error) {
-	return nil
+func clone(e *cloneContext, tgtVal, srcVal reflect.Value, opts *options) error {
+	return clonerByValue(srcVal, opts)(e, []string{}, tgtVal, srcVal, opts)
 }

@@ -1,6 +1,10 @@
 package prototype
 
-import "reflect"
+import (
+	"reflect"
+	"strings"
+	"time"
+)
 
 // Hook is a hook.
 type Hook func(fullKeys []string, tgtVal reflect.Value, srcVal reflect.Value) error
@@ -12,7 +16,8 @@ type options struct {
 	SourceTagKey string
 	TargetTagKey string
 	DeepClone    bool
-	EqualFold    func(tgtKey, srcKey string) bool
+	NameComparer func(t, s string) bool
+	UnixTime     func(t time.Time) int64
 }
 
 func (o *options) apply(opts ...Option) *options {
@@ -23,6 +28,12 @@ func (o *options) apply(opts ...Option) *options {
 }
 
 func (o *options) correct() *options {
+	if o.NameComparer == nil {
+		o.NameComparer = strings.EqualFold
+	}
+	if o.UnixTime == nil {
+		o.UnixTime = func(t time.Time) int64 { return t.Unix() }
+	}
 	return o
 }
 

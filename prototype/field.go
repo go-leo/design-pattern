@@ -2,7 +2,6 @@ package prototype
 
 import (
 	"fmt"
-	"github.com/go-leo/gox/stringx"
 	"reflect"
 	"sort"
 	"strings"
@@ -13,12 +12,10 @@ import (
 // A field represents a single field found in a struct.
 type field struct {
 	name       string
-	nameBytes  []byte                 // []byte(name)
-	equalFold  func(s, t []byte) bool // bytes.EqualFold or equivalent
 	tag        bool
 	index      []int
 	typ        reflect.Type
-	clonerFunc ClonerFunc
+	clonerFunc clonerFunc
 	fullName   string
 }
 
@@ -144,15 +141,12 @@ func typeFields(t reflect.Type, opts *options, tagKey string) structFields {
 				if name == "" {
 					name = sf.Name
 				}
-				nameBytes := []byte(name)
 				currField := field{
 					name:       name,
-					nameBytes:  nameBytes,
-					equalFold:  stringx.FoldFunc(nameBytes),
 					tag:        tagged,
 					index:      index,
 					typ:        ft,
-					clonerFunc: typeCloner(typeByIndex(t, index), opts),
+					clonerFunc: clonerByType(typeByIndex(t, index), opts),
 					fullName:   fullName(f, name, sf),
 				}
 				if t == f.typ {
@@ -255,11 +249,6 @@ func divideFields(fields []field) ([]field, []field) {
 func recessivesNameIndex(t reflect.Type, opts *options, fields []field) ([]field, map[string][]int, map[string]int) {
 	// 对字段进行排序，按照索引顺序排序。
 	sort.Sort(byIndex(fields))
-	// 对每个字段，设置其克隆器cloner
-	//for i := range fields {
-	//	f := &fields[i]
-	//	f.clonerFunc = typeCloner(typeByIndex(t, f.index), opts)
-	//}
 	// 创建一个映射 nameIndex，用于通过字段名称查找字段在 fields 中的索引。
 	nameIndex := make(map[string][]int, len(fields))
 	fullNameIndex := make(map[string]int, len(fields))
@@ -273,11 +262,6 @@ func recessivesNameIndex(t reflect.Type, opts *options, fields []field) ([]field
 func dominantsNameIndex(t reflect.Type, opts *options, fields []field) ([]field, map[string]int) {
 	// 对字段进行排序，按照索引顺序排序。
 	sort.Sort(byIndex(fields))
-	// 对每个字段，设置其克隆器cloner
-	//for i := range fields {
-	//f := &fields[i]
-	//f.clonerFunc = typeCloner(typeByIndex(t, f.index), opts)
-	//}
 	// 创建一个映射 nameIndex，用于通过字段名称查找字段在 fields 中的索引。
 	nameIndex := make(map[string]int, len(fields))
 	for i, field := range fields {
@@ -298,13 +282,8 @@ func findField(nameIndex map[string]int, fields []field, opts *options, tagName 
 	} else {
 		// 代码回退到了一种更为耗时的线性搜索方法，该方法在进行字段名称匹配时不考虑大小写
 		for tgtKey, tgtIdx := range nameIndex {
-			if opts.EqualFold != nil && opts.EqualFold(tgtKey, tagName) {
+			if opts.NameComparer(tgtKey, tagName) {
 				return fields[tgtIdx], true
-			} else {
-				f := fields[tgtIdx]
-				if f.equalFold([]byte(tgtKey), []byte(tagName)) {
-					return f, true
-				}
 			}
 		}
 	}
@@ -323,20 +302,10 @@ func findRecessiveField(tgtFields structFields, opts *options, tagKey string) ([
 	} else {
 		// 代码回退到了一种更为耗时的线性搜索方法，该方法在进行字段名称匹配时不考虑大小写
 		for tgtKey, tgtIdxs := range tgtFields.recessivesNameIndex {
-			if opts.EqualFold != nil && opts.EqualFold(tgtKey, tagKey) {
+			if opts.NameComparer(tgtKey, tagKey) {
 				fields := make([]field, 0, len(tgtIdxs))
 				for _, tgtIdx := range tgtIdxs {
 					fields = append(fields, tgtFields.recessives[tgtIdx])
-				}
-				if len(fields) > 0 {
-					return fields, true
-				}
-			} else {
-				fields := make([]field, 0, len(tgtIdxs))
-				for _, field := range tgtFields.recessives {
-					if field.equalFold([]byte(tgtKey), []byte(tagKey)) {
-						fields = append(fields, field)
-					}
 				}
 				if len(fields) > 0 {
 					return fields, true

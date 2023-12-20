@@ -5,470 +5,418 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-leo/gox/convx"
-	"github.com/go-leo/gox/reflectx"
 	"golang.org/x/exp/slices"
-	"math"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
-type ClonerFunc func(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error
+// clonerFunc 通用克隆方法
+type clonerFunc func(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error
 
-// emptyValueCloner 是将一个空值复制到目标值中。
-// 它首先检查目标值是否有效，如果无效则直接返回。
-// 然后，根据目标值的类型，将其设置为相应类型的零值或忽略 nil 值。
-func emptyValueCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	if !tgtVal.IsValid() {
-		return nil
+func clonerByValue(srcVal reflect.Value, opts *options) clonerFunc {
+	if !srcVal.IsValid() {
+		return func(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+			return nil
+		}
 	}
-	scanner, tv := indirectValue(tgtVal)
-	if scanner != nil {
-		return scanner.Scan(nil)
-	}
-	switch tv.Kind() {
-	case reflect.Pointer, reflect.Map, reflect.Slice:
-		tv.Set(reflect.Zero(tv.Type()))
-		return nil
+	return clonerByType(srcVal.Type(), opts)
+}
+
+// clonerByType 基于 reflect.Type 获取 clonerFunc
+func clonerByType(srcType reflect.Type, opts *options) clonerFunc {
+	switch srcType.Kind() {
+	case reflect.Bool:
+		return boolCloner
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return intCloner
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return uintCloner
+	case reflect.Float32, reflect.Float64:
+		return floatCloner
+	case reflect.String:
+		return stringCloner
+	case reflect.Struct:
+		return structCloner
+	case reflect.Map:
+		return mapCloner
+	case reflect.Slice:
+		return sliceCloner
+	case reflect.Array:
+		return arrayCloner
 	case reflect.Interface:
-		tv.Set(reflect.Zero(tv.Type()))
-		return nil
+		return interfaceCloner
+	case reflect.Pointer:
+		return ptrCloner
 	default:
-		// otherwise, ignore nil for primitives/string
-		tv.Set(reflect.Zero(tv.Type()))
-		return nil
+		return unsupportedTypeCloner
 	}
 }
 
-// boolCloner 将源值 srcVal 的布尔值复制到目标值 tgtVal 中。
-// 它首先检查目标值是否有效，如果无效则直接返回。
-// 然后，根据目标值的类型，将源值的布尔值设置到目标值中，或者根据情况调用 hookCloner 函数处理。
+/*
+boolCloner 克隆bool类型
+bool ----> ClonerFrom
+bool ----> bool(true, false)
+bool ----> any(true, false)
+bool ----> string("true", "false")
+bool ----> int(true:1, false:0)
+bool ----> uint(true:1, false:0)
+bool ----> float(true:1, false:0)
+bool ----> pointer
+*/
 func boolCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
 	b := srcVal.Bool()
-	scanner, tv := indirectValue(tgtVal)
-	if scanner != nil {
-		return scanner.Scan(b)
+	cloner, tv := indirectValue(tgtVal)
+	if cloner != nil {
+		return cloner.CloneFrom(b)
 	}
 	switch tv.Kind() {
 	case reflect.Bool:
 		tv.SetBool(b)
+		return nil
 	case reflect.Interface:
-		if tv.NumMethod() == 0 {
-			tv.Set(reflect.ValueOf(b))
-			return nil
-		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return setAny(e, fks, tgtVal, srcVal, opts, tv, b)
+	case reflect.String:
+		tv.SetString(strconv.FormatBool(b))
+		return nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return setInt(fks, tv, int64(boolMap[b]))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return setInt2Uint(fks, tv, int64(boolMap[b]))
+	case reflect.Float32, reflect.Float64:
+		return setFloat(fks, tv, float64(boolMap[b]))
 	case reflect.Pointer:
-		if tv.IsNil() {
-			tv.Set(reflect.New(tv.Type().Elem()))
-			tv = tv.Elem()
-			return boolCloner(e, fks, tv, srcVal, opts)
-		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return setPointer(e, fks, tgtVal, srcVal, opts, tv, boolCloner)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
-	return nil
 }
 
+/*
+intCloner 克隆int类型
+int ----> ClonerFrom
+int ----> int(i)
+int ----> any(i)
+int ----> uint(i)
+int ----> float(i)
+int ----> bool(0->false, !0->true)
+int ----> string("i")
+int ----> pointer
+*/
 func intCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
 	i := srcVal.Int()
-	scanner, tv := indirectValue(tgtVal)
-	if scanner != nil {
-		return scanner.Scan(i)
+	cloner, tv := indirectValue(tgtVal)
+	if cloner != nil {
+		return cloner.CloneFrom(i)
 	}
 	switch tv.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if tv.OverflowInt(i) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatInt(i, 10)}
-		}
-		tv.SetInt(i)
-		return nil
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		if i < 0 {
-			return &NegativeNumberError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatInt(i, 10)}
-		}
-		u := uint64(i)
-		if tv.OverflowUint(u) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatInt(i, 10)}
-		}
-		tv.SetUint(u)
-		return nil
-	case reflect.Float32, reflect.Float64:
-		f := float64(i)
-		if tv.OverflowFloat(f) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatInt(i, 10)}
-		}
-		tv.SetFloat(f)
-		return nil
+		return setInt(fks, tv, i)
 	case reflect.Interface:
-		if tv.NumMethod() == 0 {
-			tv.Set(reflect.ValueOf(i))
-			return nil
-		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	case reflect.Struct:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return setAny(e, fks, tgtVal, srcVal, opts, tv, i)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return setInt2Uint(fks, tv, i)
+	case reflect.Float32, reflect.Float64:
+		return setFloat(fks, tv, float64(i))
+	case reflect.Bool:
+		tv.SetBool(i != 0)
+		return nil
+	case reflect.String:
+		tv.SetString(strconv.FormatInt(i, 10))
+		return nil
 	case reflect.Pointer:
-		if tv.IsNil() {
-			tv.Set(reflect.New(tv.Type().Elem()))
-			tv = tv.Elem()
-			return intCloner(e, fks, tv, srcVal, opts)
-		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return setPointer(e, fks, tgtVal, srcVal, opts, tv, intCloner)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
+/*
+uintCloner 克隆uint类型
+uint ----> ClonerFrom
+uint ----> uint(u)
+uint ----> any(u)
+uint ----> int(u)
+uint ----> float(u)
+uint ----> bool(0->false, !0->true)
+uint ----> string("u")
+uint ----> pointer
+*/
 func uintCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
 	u := srcVal.Uint()
-	scanner, tv := indirectValue(tgtVal)
-	if scanner != nil {
-		return scanner.Scan(u)
+	cloner, tv := indirectValue(tgtVal)
+	if cloner != nil {
+		return cloner.CloneFrom(u)
 	}
 	switch tv.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if u > uint64(math.MaxInt64) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatUint(u, 10)}
-		}
-		i := int64(u)
-		if tv.OverflowInt(i) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatUint(u, 10)}
-		}
-		tv.SetInt(i)
-		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		if tv.OverflowUint(u) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatUint(u, 10)}
-		}
-		tv.SetUint(u)
-		return nil
-	case reflect.Float32, reflect.Float64:
-		f := float64(u)
-		if tv.OverflowFloat(f) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatUint(u, 10)}
-		}
-		tv.SetFloat(f)
-		return nil
+		return setUint(fks, tv, u)
 	case reflect.Interface:
-		if tv.NumMethod() == 0 {
-			tv.Set(reflect.ValueOf(u))
-			return nil
-		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return setAny(e, fks, tgtVal, srcVal, opts, tv, u)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return setUint2Int(fks, tv, u)
+	case reflect.Float32, reflect.Float64:
+		return setFloat(fks, tv, float64(u))
+	case reflect.Bool:
+		tv.SetBool(u != 0)
+		return nil
+	case reflect.String:
+		tv.SetString(strconv.FormatUint(u, 10))
+		return nil
 	case reflect.Pointer:
-		if tv.IsNil() {
-			tv.Set(reflect.New(tv.Type().Elem()))
-			tv = tv.Elem()
-			return uintCloner(e, fks, tv, srcVal, opts)
-		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return setPointer(e, fks, tgtVal, srcVal, opts, tv, uintCloner)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
-var (
-	float32Cloner = (floatCloner(32)).clone
-	float64Cloner = (floatCloner(64)).clone
-)
-
-type floatCloner int // number of bits
-
-func (bits floatCloner) clone(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+/*
+floatCloner 克隆float类型
+float ----> ClonerFrom
+float ----> float(f)
+float ----> any(f)
+float ----> int(f)
+float ----> uint(f)
+float ----> bool(0->false, !0->true)
+float ----> string("f")
+float ----> pointer
+*/
+func floatCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
 	f := srcVal.Float()
-	if math.IsInf(f, 0) || math.IsNaN(f) {
-		return &UnsupportedValueError{Value: srcVal, Str: strconv.FormatFloat(f, 'g', -1, int(bits))}
-	}
-	scanner, tv := indirectValue(tgtVal)
-	if scanner != nil {
-		return scanner.Scan(f)
+	cloner, tv := indirectValue(tgtVal)
+	if cloner != nil {
+		return cloner.CloneFrom(f)
 	}
 	switch tv.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if f > float64(math.MaxInt64) || f < float64(math.MinInt64) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, 64)}
-		}
-		i := int64(f)
-		if tv.OverflowInt(i) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, int(bits))}
-		}
-		tv.SetInt(i)
-		return nil
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		if f > float64(math.MaxUint64) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, 64)}
-		}
-		if f < 0 {
-			return &NegativeNumberError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatFloat(f, 'g', -1, int(bits))}
-		}
-		u := uint64(f)
-		if tv.OverflowUint(u) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, int(bits))}
-		}
-		tv.SetUint(u)
-		return nil
 	case reflect.Float32, reflect.Float64:
-		if tv.OverflowFloat(f) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, int(bits))}
-		}
-		tv.SetFloat(f)
-		return nil
+		return setFloat(fks, tv, f)
 	case reflect.Interface:
-		if tv.NumMethod() == 0 {
-			tv.Set(reflect.ValueOf(f))
-			return nil
-		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return setAny(e, fks, tgtVal, srcVal, opts, tv, f)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return setFloat2Int(fks, tv, f)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return setFloat2Uint(fks, tv, f)
+	case reflect.Bool:
+		tv.SetBool(f != 0)
+		return nil
+	case reflect.String:
+		tv.SetString(strconv.FormatFloat(f, 'f', -1, 64))
+		return nil
 	case reflect.Pointer:
-		if tv.IsNil() {
-			tv.Set(reflect.New(tv.Type().Elem()))
-			tv = tv.Elem()
-			return bits.clone(e, fks, tv, srcVal, opts)
-		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return setPointer(e, fks, tgtVal, srcVal, opts, tv, floatCloner)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
+/*
+stringCloner 克隆float类型
+string ----> ClonerFrom
+string ----> string("s")
+string ----> []byte("s")
+string ----> any("s")
+string ----> bool("1", "t", "T", "true", "TRUE", "True"->false, "0", "f", "F", "false", "FALSE", "False"->true)
+string ----> int("s")
+string ----> uint("s")
+string ----> float("s")
+string ----> pointer
+*/
 func stringCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
 	s := srcVal.String()
-	scanner, tv := indirectValue(tgtVal)
-	if scanner != nil {
-		return scanner.Scan(s)
+	cloner, tv := indirectValue(tgtVal)
+	if cloner != nil {
+		return cloner.CloneFrom(s)
 	}
 	switch tv.Kind() {
-	case reflect.Slice:
-		if tv.Type().Elem().Kind() != reflect.Uint8 {
-			return &CloneError{Value: "string", Type: tv.Type()}
-		}
-		tv.SetBytes([]byte(s))
 	case reflect.String:
 		tv.SetString(s)
-	case reflect.Interface:
-		if tv.NumMethod() == 0 {
-			tv.Set(reflect.ValueOf(s))
+		return nil
+	case reflect.Slice:
+		if tv.Type().Elem().Kind() == reflect.Uint8 {
+			tv.SetBytes([]byte(s))
 			return nil
 		}
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	case reflect.Pointer:
-		if tv.IsNil() {
-			tv.Set(reflect.New(tv.Type().Elem()))
-			tv = tv.Elem()
-			return stringCloner(e, fks, tv, srcVal, opts)
+	case reflect.Interface:
+		return setAny(e, fks, tgtVal, srcVal, opts, tv, s)
+	case reflect.Bool:
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return newStringParseError(fks, tv.Type(), s, err)
 		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		tv.SetBool(b)
+		return nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		i, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return newStringParseError(fks, tv.Type(), s, err)
+		}
+		return setInt(fks, tv, i)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		u, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return newStringParseError(fks, tv.Type(), s, err)
+		}
+		return setUint(fks, tv, u)
+	case reflect.Float32, reflect.Float64:
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return newStringParseError(fks, tv.Type(), s, err)
+		}
+		return setFloat(fks, tv, f)
+	case reflect.Pointer:
+		return setPointer(e, fks, tgtVal, srcVal, opts, tv, stringCloner)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
-	return nil
 }
 
-func interfaceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	if srcVal.IsNil() {
-		return nil
-	}
+/*
+timeCloner 克隆time.Time类型
+time.Time ----> ClonerFrom
+time.Time ----> struct(time.Time)
+time.Time ----> any(time.Time)
+time.Time ----> string(time.RFC3339)
+time.Time ----> []byte(time.RFC3339)
+time.Time ----> int(time.Unix)
+time.Time ----> uint(time.Unix)
+time.Time ----> float(time.Unix)
+time.Time ----> pointer
+*/
+func timeCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
-	srcVal = srcVal.Elem()
-	return valueCloner(srcVal, opts)(e, fks, tgtVal, srcVal, opts)
+	t := srcVal.Interface().(time.Time)
+	cloner, tv := indirectValue(tgtVal)
+	if cloner != nil {
+		return cloner.CloneFrom(t)
+	}
+	switch tv.Kind() {
+	case reflect.Struct:
+		if tv.Type() == timeType {
+			tv.Set(reflect.ValueOf(t))
+			return nil
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	case reflect.Interface:
+		return setAny(e, fks, tgtVal, srcVal, opts, tv, t)
+	case reflect.String:
+		tv.SetString(t.Format(time.RFC3339))
+		return nil
+	case reflect.Slice:
+		if tv.Type().Elem().Kind() == reflect.Uint8 {
+			tv.SetBytes([]byte(t.Format(time.RFC3339)))
+			return nil
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return setInt(fks, tv, opts.UnixTime(t))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return setUint(fks, tv, uint64(opts.UnixTime(t)))
+	case reflect.Float32, reflect.Float64:
+		return setFloat(fks, tv, float64(opts.UnixTime(t)))
+	case reflect.Pointer:
+		return setPointer(e, fks, tgtVal, srcVal, opts, tv, timeCloner)
+	default:
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	}
 }
 
+/*
+structCloner 克隆 struct 类型
+sql.NullBool ----> boolCloner
+sql.NullByte ----> uintCloner
+sql.NullInt16 ----> intCloner
+sql.NullInt32 ----> intCloner
+sql.NullInt64 ----> intCloner
+sql.NullFloat64 ----> floatCloner
+sql.NullString ----> stringCloner
+sql.NullTime ----> timeCloner
+struct ----> ClonerFrom
+struct ----> struct
+struct ----> any(map[string]any)
+struct ----> map
+struct ----> pointer
+*/
 func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
-	scanner, tv := indirectValue(tgtVal)
-	if scanner != nil {
-		return scanner.Scan(srcVal.Interface())
-	}
-	switch tv.Kind() {
-	case reflect.Bool:
-		return struct2BoolCloner(e, fks, tgtVal, srcVal, opts, tv)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return struct2IntCloner(e, fks, tgtVal, srcVal, opts, tv)
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return struct2UintCloner(e, fks, tgtVal, srcVal, opts, tv)
-	case reflect.Float32, reflect.Float64:
-		return struct2FloatCloner(e, fks, tgtVal, srcVal, opts, tv)
-	case reflect.String:
-		return struct2StringCloner(e, fks, tgtVal, srcVal, opts, tv)
-	case reflect.Slice:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	case reflect.Struct:
-		return struct2StructCloner(e, fks, tv, srcVal, opts)
-	case reflect.Interface:
-		if tv.NumMethod() == 0 {
-			return struct2AnyCloner(e, fks, tv, srcVal, opts)
+
+	switch srcVal.Type() {
+	case sqlNullBoolType:
+		return boolCloner(e, fks, tgtVal, srcVal.FieldByName("Bool"), opts)
+	case sqlNullByteType:
+		return uintCloner(e, fks, tgtVal, srcVal.FieldByName("Byte"), opts)
+	case sqlNullInt16Type:
+		return intCloner(e, fks, tgtVal, srcVal.FieldByName("Int16"), opts)
+	case sqlNullInt32Type:
+		return intCloner(e, fks, tgtVal, srcVal.FieldByName("Int32"), opts)
+	case sqlNullInt64Type:
+		return intCloner(e, fks, tgtVal, srcVal.FieldByName("Int64"), opts)
+	case sqlNullFloat64Type:
+		return floatCloner(e, fks, tgtVal, srcVal.FieldByName("Float64"), opts)
+	case sqlNullStringType:
+		return stringCloner(e, fks, tgtVal, srcVal.FieldByName("String"), opts)
+	case sqlNullTimeType:
+		return timeCloner(e, fks, tgtVal, srcVal.FieldByName("Time"), opts)
+	default:
+		cloner, tv := indirectValue(tgtVal)
+		if cloner != nil {
+			return cloner.CloneFrom(srcVal.Interface())
 		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	case reflect.Map:
-		t := tv.Type()
-		switch t.Key().Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
-			reflect.Float32, reflect.Float64,
-			reflect.String, reflect.Bool:
-			if tv.IsNil() {
-				tv.Set(reflect.MakeMap(t))
+		switch tv.Kind() {
+		case reflect.Struct:
+			return struct2StructCloner(e, fks, tv, srcVal, opts)
+		case reflect.Interface:
+			if tv.NumMethod() == 0 {
+				return struct2AnyCloner(e, fks, tv, srcVal, opts)
 			}
-			return struct2MapCloner(e, fks, tv, srcVal, opts)
-		default:
-			if reflect.PointerTo(t.Key()).Implements(textUnmarshalerType) {
+			return hookCloner(e, fks, tgtVal, srcVal, opts)
+		case reflect.Map:
+			t := tv.Type()
+			switch t.Key().Kind() {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+				reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+				reflect.Float32, reflect.Float64,
+				reflect.String, reflect.Bool:
 				if tv.IsNil() {
 					tv.Set(reflect.MakeMap(t))
 				}
 				return struct2MapCloner(e, fks, tv, srcVal, opts)
+			default:
+				if reflect.PointerTo(t.Key()).Implements(textUnmarshalerType) {
+					if tv.IsNil() {
+						tv.Set(reflect.MakeMap(t))
+					}
+					return struct2MapCloner(e, fks, tv, srcVal, opts)
+				}
 			}
+			return hookCloner(e, fks, tgtVal, srcVal, opts)
+		case reflect.Pointer:
+			return setPointer(e, fks, tgtVal, srcVal, opts, tv, structCloner)
+		default:
+			return hookCloner(e, fks, tgtVal, srcVal, opts)
 		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	case reflect.Pointer:
-		if tv.IsNil() {
-			tv.Set(reflect.New(tv.Type().Elem()))
-			tv = tv.Elem()
-			return structCloner(e, fks, tv, srcVal, opts)
-		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	case reflect.Array:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
-}
-
-func struct2BoolCloner(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value) error {
-	var b bool
-	switch srcVal.Type() {
-	case sqlNullBoolType:
-		b = srcVal.FieldByName("Bool").Bool()
-	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	}
-	tv.SetBool(b)
-	return nil
-}
-
-func struct2IntCloner(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value) error {
-	var i int64
-	switch srcVal.Type() {
-	case sqlNullByteType:
-		i = int64(srcVal.FieldByName("Byte").Uint())
-	case sqlNullInt16Type:
-		i = srcVal.FieldByName("Int16").Int()
-	case sqlNullInt32Type:
-		i = srcVal.FieldByName("Int32").Int()
-	case sqlNullInt64Type:
-		i = srcVal.FieldByName("Int64").Int()
-	case sqlNullFloat64Type:
-		f := srcVal.FieldByName("Float64").Float()
-		if f > float64(math.MaxInt64) || f < float64(math.MinInt64) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, 64)}
-		}
-		i = int64(f)
-	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	}
-	if tv.OverflowInt(i) {
-		return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatInt(i, 10)}
-	}
-	tv.SetInt(i)
-	return nil
-}
-
-func struct2UintCloner(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value) error {
-	var u uint64
-	switch srcVal.Type() {
-	case sqlNullByteType:
-		u = srcVal.FieldByName("Byte").Uint()
-	case sqlNullInt16Type:
-		i := srcVal.FieldByName("Int16").Int()
-		if i < 0 {
-			return &NegativeNumberError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatInt(i, 10)}
-		}
-		u = uint64(i)
-	case sqlNullInt32Type:
-		i := srcVal.FieldByName("Int32").Int()
-		if i < 0 {
-			return &NegativeNumberError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatInt(i, 10)}
-		}
-		u = uint64(i)
-	case sqlNullInt64Type:
-		i := srcVal.FieldByName("Int64").Int()
-		if i < 0 {
-			return &NegativeNumberError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatInt(i, 10)}
-		}
-		u = uint64(i)
-	case sqlNullFloat64Type:
-		f := srcVal.FieldByName("Float64").Float()
-		if f > float64(math.MaxUint64) {
-			return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, 64)}
-		}
-		if f < 0 {
-			return &NegativeNumberError{FullKeys: fks, TargetValue: tgtVal, Value: strconv.FormatFloat(f, 'g', -1, 64)}
-		}
-		u = uint64(f)
-	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	}
-	if tv.OverflowUint(u) {
-		return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatUint(u, 10)}
-	}
-	tv.SetUint(u)
-	return nil
-}
-
-func struct2FloatCloner(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value) error {
-	var f float64
-	switch srcVal.Type() {
-	case sqlNullByteType:
-		f = float64(srcVal.FieldByName("Byte").Uint())
-	case sqlNullInt16Type:
-		f = float64(srcVal.FieldByName("Int16").Int())
-	case sqlNullInt32Type:
-		f = float64(srcVal.FieldByName("Int32").Int())
-	case sqlNullInt64Type:
-		f = float64(srcVal.FieldByName("Int64").Int())
-	case sqlNullFloat64Type:
-		f = srcVal.FieldByName("Float64").Float()
-	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	}
-	if tv.OverflowFloat(f) {
-		return &OverflowError{FullKeys: fks, TargetType: tgtVal.Type(), Value: strconv.FormatFloat(f, 'g', -1, 64)}
-	}
-	tv.SetFloat(f)
-	return nil
-}
-
-func struct2StringCloner(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value) error {
-	var s string
-	switch srcVal.Type() {
-	case sqlNullStringType:
-		s = srcVal.FieldByName("String").String()
-	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	}
-	tv.SetString(s)
-	return nil
 }
 
 func struct2StructCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
@@ -506,14 +454,6 @@ func struct2StructDominantFieldCloner(e *cloneContext, fks []string, tgtVal, src
 		tgtDominantFieldVal, err := findSettableValue(tgtVal, tgtDominantField)
 		if err != nil {
 			return err
-		}
-
-		// 如果src字段是空值，则克隆空值
-		if reflectx.IsEmptyValue(srcDominantFieldVal) {
-			if err := emptyValueCloner(e, append(slices.Clone(fks), srcName), tgtDominantFieldVal, srcDominantFieldVal, opts); err != nil {
-				return err
-			}
-			continue
 		}
 
 		// 克隆src字段到tgt字段
@@ -562,13 +502,6 @@ func struct2StructRecessivesFieldCloner(e *cloneContext, fks []string, tgtVal, s
 		for fullName, srcRecessiveFieldVal := range srcRecessiveFieldValMap {
 			tgtRecessiveFieldVal, ok := tgtRecessiveFieldValMap[fullName]
 			if !ok {
-				continue
-			}
-			// 如果src字段是空值，则克隆空值
-			if reflectx.IsEmptyValue(srcRecessiveFieldVal) {
-				if err := emptyValueCloner(e, append(slices.Clone(fks), srcKey), tgtRecessiveFieldVal, srcRecessiveFieldVal, opts); err != nil {
-					return err
-				}
 				continue
 			}
 
@@ -636,6 +569,8 @@ func struct2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 	var mapElem reflect.Value
 	elemType := tgtType.Elem()
 	for _, selfField := range srcFields.selfFields {
+		fieldFks := append(slices.Clone(fks), selfField.name)
+
 		// 查找src字段值
 		srcDominantFieldVal, ok := findValue(srcVal, selfField)
 		if !ok {
@@ -650,7 +585,7 @@ func struct2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 		vVal := mapElem
 
 		// 克隆src字段到tgt字段
-		if err := selfField.clonerFunc(e, append(slices.Clone(fks), selfField.name), vVal, srcDominantFieldVal, opts); err != nil {
+		if err := selfField.clonerFunc(e, fieldFks, vVal, srcDominantFieldVal, opts); err != nil {
 			return err
 		}
 
@@ -674,38 +609,35 @@ func struct2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 				return err
 			}
 			kVal = reflect.ValueOf(b).Convert(kType)
-		default:
-			switch kType.Kind() {
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				n, err := strconv.ParseInt(selfField.name, 10, 64)
-				if err != nil {
-					return err
-				}
-				if reflect.Zero(kType).OverflowInt(n) {
-					return &OverflowError{FullKeys: fks, TargetType: kType, Value: selfField.name}
-				}
-				kVal = reflect.ValueOf(n).Convert(kType)
-			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-				n, err := strconv.ParseUint(selfField.name, 10, 64)
-				if err != nil {
-					return err
-				}
-				if reflect.Zero(kType).OverflowUint(n) {
-					return &OverflowError{FullKeys: fks, TargetType: kType, Value: selfField.name}
-				}
-				kVal = reflect.ValueOf(n).Convert(kType)
-			case reflect.Float32, reflect.Float64:
-				n, err := strconv.ParseFloat(selfField.name, 64)
-				if err != nil {
-					return err
-				}
-				if reflect.Zero(kType).OverflowFloat(n) {
-					return &OverflowError{FullKeys: fks, TargetType: kType, Value: selfField.name}
-				}
-				kVal = reflect.ValueOf(n).Convert(kType)
-			default:
-				return errors.New("prototype: Unexpected key type")
+		case slices.Contains(intKinds, kType.Kind()):
+			i, err := strconv.ParseInt(selfField.name, 10, 64)
+			if err != nil {
+				return err
 			}
+			kVal = reflect.Zero(kType)
+			if err := setInt(fks, kVal, i); err != nil {
+				return err
+			}
+		case slices.Contains(uintKinds, kType.Kind()):
+			u, err := strconv.ParseUint(selfField.name, 10, 64)
+			if err != nil {
+				return err
+			}
+			kVal = reflect.Zero(kType)
+			if err := setUint(fks, kVal, u); err != nil {
+				return err
+			}
+		case slices.Contains(floatKinds, kType.Kind()):
+			f, err := strconv.ParseFloat(selfField.name, 64)
+			if err != nil {
+				return err
+			}
+			kVal = reflect.Zero(kType)
+			if err := setFloat(fieldFks, kVal, f); err != nil {
+				return err
+			}
+		default:
+			return errors.New("prototype: Unexpected key type")
 		}
 		if !kVal.IsValid() {
 			continue
@@ -763,9 +695,9 @@ func mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 		return nil
 	}
 
-	scanner, tv := indirectValue(tgtVal)
-	if scanner != nil {
-		return scanner.Scan(srcVal.Interface())
+	cloner, tv := indirectValue(tgtVal)
+	if cloner != nil {
+		return cloner.CloneFrom(srcVal.Interface())
 	}
 
 	if e.forward(); e.isTooDeep() {
@@ -836,12 +768,12 @@ func map2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, 
 		}
 		vVal := mapElem
 
-		if err := typeCloner(pair.vVal.Type(), opts)(e, append(slices.Clone(fks), pair.keyStr), vVal, pair.vVal, opts); err != nil {
+		if err := clonerByType(pair.vVal.Type(), opts)(e, append(slices.Clone(fks), pair.keyStr), vVal, pair.vVal, opts); err != nil {
 			return err
 		}
 
 		kVal := reflect.New(tgtType.Key())
-		if err := typeCloner(pair.kVal.Type(), opts)(e, append(slices.Clone(fks), pair.keyStr), kVal, pair.kVal, opts); err != nil {
+		if err := clonerByType(pair.kVal.Type(), opts)(e, append(slices.Clone(fks), pair.keyStr), kVal, pair.kVal, opts); err != nil {
 			return err
 		}
 		kVal = kVal.Elem()
@@ -861,7 +793,7 @@ func map2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, 
 		return err
 	}
 	for _, pair := range pairs {
-		valueCloner := typeCloner(pair.vVal.Type(), opts)
+		valueCloner := clonerByType(pair.vVal.Type(), opts)
 
 		var vVal reflect.Value
 		switch pair.vVal.Kind() {
@@ -909,7 +841,7 @@ func map2StructCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 			continue
 		}
 		tVal := tgtVal.FieldByIndex(tgtField.index)
-		valueCloner := typeCloner(pair.vVal.Type(), opts)
+		valueCloner := clonerByType(pair.vVal.Type(), opts)
 		if err := valueCloner(e, append(slices.Clone(fks), pair.keyStr), tVal, pair.vVal, opts); err != nil {
 			return err
 		}
@@ -926,9 +858,9 @@ func sliceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 		return nil
 	}
 	srcType := srcVal.Type()
-	scanner, tv := indirectValue(tgtVal)
-	if scanner != nil {
-		return scanner.Scan(srcVal.Interface())
+	cloner, tv := indirectValue(tgtVal)
+	if cloner != nil {
+		return cloner.CloneFrom(srcVal.Interface())
 	}
 	if tv.Kind() == reflect.String && srcType.Elem().Kind() == reflect.Uint8 {
 		builder := strings.Builder{}
@@ -945,7 +877,7 @@ func sliceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 		ptr := struct {
 			ptr interface{} // always an unsafe.Pointer, but avoids a dependency on package unsafe
 			len int
-		}{srcVal.UnsafePointer(), srcVal.Len()}
+		}{ptr: srcVal.UnsafePointer(), len: srcVal.Len()}
 		if e.isSeen(ptr) {
 			return &UnsupportedValueError{Value: srcVal, Str: fmt.Sprintf("encountered a cycle via %s", srcVal.Type())}
 		}
@@ -960,9 +892,9 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 	if !tgtVal.IsValid() {
 		return nil
 	}
-	scanner, tv := indirectValue(tgtVal)
-	if scanner != nil {
-		return scanner.Scan(srcVal.Interface())
+	cloner, tv := indirectValue(tgtVal)
+	if cloner != nil {
+		return cloner.CloneFrom(srcVal.Interface())
 	}
 	switch tv.Kind() {
 	case reflect.Array, reflect.Slice:
@@ -971,7 +903,7 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 			tv.Set(reflect.MakeSlice(tv.Type(), srcLen, srcLen))
 			tv.SetLen(0)
 		}
-		elemEnc := typeCloner(tv.Type().Elem(), opts)
+		elemCloner := clonerByType(srcVal.Type().Elem(), opts)
 		for i := 0; i < srcVal.Len(); i++ {
 			if tv.Kind() == reflect.Slice {
 				tv.SetLen(i + 1)
@@ -982,7 +914,7 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 			}
 			tgtItem := tv.Index(i)
 			srcItem := srcVal.Index(i)
-			if err := elemEnc(e, append(slices.Clone(fks), convx.ToString(i)), tgtItem, srcItem, opts); err != nil {
+			if err := elemCloner(e, append(slices.Clone(fks), strconv.FormatInt(int64(i), 10)), tgtItem, srcItem, opts); err != nil {
 				return err
 			}
 			tv.Index(i).Set(tgtItem)
@@ -1006,7 +938,7 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 }
 
 func array2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	elemEnc := typeCloner(tgtVal.Type().Elem(), opts)
+	elemEnc := clonerByType(tgtVal.Type().Elem(), opts)
 	srcLen := srcVal.Len()
 	// 创建一个切片
 	tgtSlice := make([]any, 0, srcLen)
@@ -1025,6 +957,17 @@ func array2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value
 	return nil
 }
 
+func interfaceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	if srcVal.IsNil() {
+		return nil
+	}
+	if !tgtVal.IsValid() {
+		return nil
+	}
+	srcVal = srcVal.Elem()
+	return clonerByValue(srcVal, opts)(e, fks, tgtVal, srcVal, opts)
+}
+
 func ptrCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if srcVal.IsNil() {
 		return nil
@@ -1040,7 +983,7 @@ func ptrCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 		defer e.forget(ptr)
 	}
 	defer e.back()
-	cloner := typeCloner(srcVal.Type().Elem(), opts)
+	cloner := clonerByType(srcVal.Type().Elem(), opts)
 	if err := cloner(e, fks, tgtVal, srcVal.Elem(), opts); err != nil {
 		return err
 	}
