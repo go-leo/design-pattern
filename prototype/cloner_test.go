@@ -3,6 +3,8 @@ package prototype
 import (
 	"database/sql"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"math"
 	"reflect"
 	"strconv"
@@ -39,47 +41,142 @@ func TestClonerFrom(t *testing.T) {
 	}
 
 	var err error
-	var tgtIClonerFromString testClonerFromString
+	var tgtClonerFrom testClonerFromString
 
 	srcBool := true
-	tgtIClonerFromString = ""
-	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIClonerFromString), reflect.ValueOf(srcBool), opts)
+	tgtClonerFrom = ""
+	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtClonerFrom), reflect.ValueOf(srcBool), opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, strconv.FormatBool(srcBool), tgtIClonerFromString)
+	assert.EqualValues(t, strconv.FormatBool(srcBool), tgtClonerFrom)
 
 	var srcInt = math.MaxInt
-	tgtIClonerFromString = ""
-	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIClonerFromString), reflect.ValueOf(srcInt), opts)
+	tgtClonerFrom = ""
+	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtClonerFrom), reflect.ValueOf(srcInt), opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, strconv.FormatInt(int64(srcInt), 10), tgtIClonerFromString)
+	assert.EqualValues(t, strconv.FormatInt(int64(srcInt), 10), tgtClonerFrom)
 
 	var srcUint uint = math.MaxUint
-	tgtIClonerFromString = ""
-	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIClonerFromString), reflect.ValueOf(srcUint), opts)
+	tgtClonerFrom = ""
+	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtClonerFrom), reflect.ValueOf(srcUint), opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, strconv.FormatUint(uint64(srcUint), 10), string(tgtIClonerFromString))
+	assert.EqualValues(t, strconv.FormatUint(uint64(srcUint), 10), string(tgtClonerFrom))
 
 	var srcFloat32 float32 = math.MaxFloat32
-	tgtIClonerFromString = ""
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIClonerFromString), reflect.ValueOf(srcFloat32), opts)
+	tgtClonerFrom = ""
+	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtClonerFrom), reflect.ValueOf(srcFloat32), opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, strconv.FormatFloat(float64(srcFloat32), 'g', -1, 64), tgtIClonerFromString)
+	assert.EqualValues(t, strconv.FormatFloat(float64(srcFloat32), 'g', -1, 64), tgtClonerFrom)
 
 	var srcFloat64 = math.MaxFloat64
-	tgtIClonerFromString = ""
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIClonerFromString), reflect.ValueOf(srcFloat64), opts)
+	tgtClonerFrom = ""
+	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtClonerFrom), reflect.ValueOf(srcFloat64), opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, strconv.FormatFloat(srcFloat64, 'g', -1, 64), tgtIClonerFromString)
+	assert.EqualValues(t, strconv.FormatFloat(srcFloat64, 'g', -1, 64), tgtClonerFrom)
 
 	var srcString = "hello prototype"
-	tgtIClonerFromString = ""
-	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtIClonerFromString), reflect.ValueOf(srcString), opts)
+	tgtClonerFrom = ""
+	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtClonerFrom), reflect.ValueOf(srcString), opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, srcString, tgtIClonerFromString)
+	assert.EqualValues(t, srcString, tgtClonerFrom)
 
 }
 
+type testClonerToString string
+
+func (s *testClonerToString) CloneTo(tgt any) error {
+	switch tgt := tgt.(type) {
+	case *bool:
+		b, err := strconv.ParseBool(string(*s))
+		if err != nil {
+			return err
+		}
+		*tgt = b
+	case *int64:
+		i, err := strconv.ParseInt(string(*s), 10, 64)
+		if err != nil {
+			return err
+		}
+		*tgt = i
+	case *uint64:
+		u, err := strconv.ParseUint(string(*s), 10, 64)
+		if err != nil {
+			return err
+		}
+		*tgt = u
+	case *float64:
+		f, err := strconv.ParseFloat(string(*s), 64)
+		if err != nil {
+			return err
+		}
+		*tgt = f
+	case *string:
+		*tgt = string(*s)
+	case *testClonerToString:
+		*tgt = *s
+	}
+	return nil
+}
+
+type testClonerToStruct struct {
+	S testClonerToString
+}
+
 func TestClonerTo(t *testing.T) {
+	opts := &options{
+		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
+		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
+		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
+		SourceTagKey: "",
+	}
+
+	var err error
+	var srcClonerTo testClonerToString
+
+	srcClonerTo = "true"
+	srcClonerToVal := reflect.ValueOf(&srcClonerTo)
+	cloner := valueCloner(srcClonerToVal, opts)
+	var tgtBool bool
+	err = cloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtBool), srcClonerToVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcClonerTo, strconv.FormatBool(tgtBool))
+
+	srcClonerTo = testClonerToString(strconv.FormatInt(math.MaxInt64, 10))
+	srcClonerToVal = reflect.ValueOf(&srcClonerTo)
+	cloner = valueCloner(srcClonerToVal, opts)
+	var tgtInt64 int64
+	err = cloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtInt64), srcClonerToVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcClonerTo, strconv.FormatInt(tgtInt64, 10))
+
+	srcClonerTo = testClonerToString(strconv.FormatUint(math.MaxUint, 10))
+	srcClonerToVal = reflect.ValueOf(&srcClonerTo)
+	cloner = valueCloner(srcClonerToVal, opts)
+	var tgtUint64 uint64
+	err = cloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtUint64), srcClonerToVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcClonerTo, strconv.FormatUint(tgtUint64, 10))
+
+	srcClonerTo = testClonerToString(strconv.FormatFloat(math.MaxFloat64, 'f', -1, 64))
+	srcClonerToVal = reflect.ValueOf(&srcClonerTo)
+	cloner = valueCloner(srcClonerToVal, opts)
+	var tgtFloat64 float64
+	err = cloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtFloat64), srcClonerToVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcClonerTo, strconv.FormatFloat(tgtFloat64, 'f', -1, 64))
+
+	srcClonerTo = "hello prototype"
+	srcClonerToVal = reflect.ValueOf(&srcClonerTo)
+	cloner = valueCloner(srcClonerToVal, opts)
+	var tgtString string
+	err = cloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtString), srcClonerToVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcClonerTo, tgtString)
+
+	srcClonerToStruct := testClonerToStruct{S: srcClonerTo}
+	srcClonerToStructVal := reflect.ValueOf(&srcClonerToStruct)
+	cloner = valueCloner(srcClonerToStructVal, opts)
+	var tgtClonerToStruct testClonerToStruct
+	err = cloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtClonerToStruct), srcClonerToStructVal, opts)
 
 }
 
@@ -289,17 +386,105 @@ func TestStringCloner(t *testing.T) {
 	var tgtString string
 	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtString), reflect.ValueOf(srcString), opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, tgtString, srcString)
+	assert.EqualValues(t, srcString, tgtString)
 
 	var tgtBytes []byte
 	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtBytes), reflect.ValueOf(srcString), opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, tgtBytes, srcString)
+	assert.EqualValues(t, srcString, tgtBytes)
 
 	var tgtAny any
 	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAny), reflect.ValueOf(srcString), opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, tgtAny, srcString)
+	assert.EqualValues(t, srcString, tgtAny)
+
+	srcString = "true"
+	var tgtBool bool
+	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtBool), reflect.ValueOf(srcString), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, true, tgtBool)
+
+	srcString = "-1000000000"
+	var tgtInt int
+	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtInt), reflect.ValueOf(srcString), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, -1000000000, tgtInt)
+
+	srcString = "1000000000"
+	var tgtUint uint
+	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtUint), reflect.ValueOf(srcString), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 1000000000, tgtUint)
+
+	srcString = "3.1415836"
+	var tgtFloat64 float64
+	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtFloat64), reflect.ValueOf(srcString), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, tgtFloat64, 3.1415836)
+
+	srcString = "3.1415836"
+	var tgtStrPtr *string
+	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtStrPtr), reflect.ValueOf(srcString), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, tgtFloat64, 3.1415836)
+}
+
+func TestBytesCloner(t *testing.T) {
+	opts := &options{
+		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
+		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
+		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
+		SourceTagKey: "",
+	}
+
+	var err error
+
+	var srcBytes = []byte("120.4")
+
+	var tgtBytes []byte
+	err = bytesCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtBytes), reflect.ValueOf(srcBytes), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcBytes, tgtBytes)
+
+	var tgtString string
+	err = bytesCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtString), reflect.ValueOf(srcBytes), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcBytes, tgtString)
+
+	var tgtAny any
+	err = bytesCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAny), reflect.ValueOf(srcBytes), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcBytes, tgtAny)
+
+	srcBytes = []byte("true")
+	var tgtBool bool
+	err = bytesCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtBool), reflect.ValueOf(srcBytes), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, true, tgtBool)
+
+	srcBytes = []byte("-1000000000")
+	var tgtInt int
+	err = bytesCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtInt), reflect.ValueOf(srcBytes), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, -1000000000, tgtInt)
+
+	srcBytes = []byte("1000000000")
+	var tgtUint uint
+	err = bytesCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtUint), reflect.ValueOf(srcBytes), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 1000000000, tgtUint)
+
+	srcBytes = []byte("3.1415836")
+	var tgtFloat64 float64
+	err = bytesCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtFloat64), reflect.ValueOf(srcBytes), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, tgtFloat64, 3.1415836)
+
+	srcBytes = []byte("3.1415836")
+	var tgtStrPtr *string
+	err = bytesCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtStrPtr), reflect.ValueOf(srcBytes), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, tgtFloat64, 3.1415836)
 }
 
 func TestTimeCloner(t *testing.T) {
@@ -417,6 +602,18 @@ func TestStructCloner(t *testing.T) {
 	err = structCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtFloat64), reflect.ValueOf(srcSqlNullFloat), opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, tgtFloat64, srcSqlNullFloat.Float64)
+
+	now := time.Now()
+	srcTimestampPB := timestamppb.New(now)
+	var tgtTime time.Time
+	err = pointerCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtTime), reflect.ValueOf(srcTimestampPB), opts)
+	assert.EqualValues(t, now.Local().Format(time.DateTime), tgtTime.Local().Format(time.DateTime))
+
+	hour := time.Hour
+	srcDurationPB := durationpb.New(hour)
+	var tgtDuration time.Duration
+	err = pointerCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtDuration), reflect.ValueOf(srcDurationPB), opts)
+	assert.EqualValues(t, hour, tgtDuration)
 
 	type Error struct {
 		Course string
@@ -715,6 +912,14 @@ func TestInterfaceCloner(t *testing.T) {
 	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAny), reflect.ValueOf(srcString), new(options))
 	assert.NoError(t, err)
 	assert.EqualValues(t, tgtAny, srcString)
+}
+
+func TestDuration(t *testing.T) {
+	src := time.Hour
+	var tgt time.Duration
+	err := Clone(&tgt, src)
+	assert.NoError(t, err)
+	assert.EqualValues(t, src, tgt)
 }
 
 //

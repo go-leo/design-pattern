@@ -32,5 +32,5 @@ func Clone(tgt any, src any, opts ...Option) error {
 }
 
 func clone(e *cloneContext, tgtVal, srcVal reflect.Value, opts *options) error {
-	return clonerByValue(srcVal, opts)(e, []string{}, tgtVal, srcVal, opts)
+	return valueCloner(srcVal, opts)(e, []string{}, tgtVal, srcVal, opts)
 }

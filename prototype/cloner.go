@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"github.com/go-leo/gox/convx"
 	"golang.org/x/exp/slices"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"reflect"
 	"sort"
 	"strconv"
@@ -16,52 +19,20 @@ import (
 // clonerFunc 通用克隆方法
 type clonerFunc func(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error
 
-func clonerByValue(srcVal reflect.Value, opts *options) clonerFunc {
+// valueCloner 基于 reflect.Value 获取 clonerFunc
+func valueCloner(srcVal reflect.Value, opts *options) clonerFunc {
 	if !srcVal.IsValid() {
 		return func(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 			return nil
 		}
 	}
-	return clonerByType(srcVal.Type(), true, opts)
+	return typeCloner(srcVal.Type(), true, opts)
 }
 
-// newCondAddrEncoder returns an encoder that checks whether its value
-// CanAddr and delegates to canAddrEnc if so, else to elseEnc.
-func newCondAddrEncoder(canAddrEnc, elseEnc clonerFunc) clonerFunc {
-	return func(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-		if srcVal.CanAddr() {
-			return canAddrEnc(e, fks, tgtVal, srcVal, opts)
-		} else {
-			return elseEnc(e, fks, tgtVal, srcVal, opts)
-		}
-	}
-}
-
-func clonerToCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	if srcVal.Kind() == reflect.Pointer && srcVal.IsNil() {
-		return nil
-	}
-	if cloner, ok := srcVal.Interface().(ClonerTo); ok {
-		return cloner.CloneTo(tgtVal)
-	}
-	return nil
-}
-
-func addrClonerToCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	srcAddr := srcVal.Addr()
-	if srcAddr.IsNil() {
-		return nil
-	}
-	if cloner, ok := srcAddr.Interface().(ClonerTo); ok {
-		return cloner.CloneTo(tgtVal)
-	}
-	return nil
-}
-
-// clonerByType 基于 reflect.Type 获取 clonerFunc
-func clonerByType(srcType reflect.Type, allowAddr bool, opts *options) clonerFunc {
+// typeCloner 基于 reflect.Type 获取 clonerFunc
+func typeCloner(srcType reflect.Type, allowAddr bool, opts *options) clonerFunc {
 	if srcType.Kind() != reflect.Pointer && allowAddr && reflect.PointerTo(srcType).Implements(clonerToType) {
-		return newCondAddrEncoder(addrClonerToCloner, clonerByType(srcType, false, opts))
+		return addrClonerToCloner()
 	}
 	if srcType.Implements(clonerToType) {
 		return clonerToCloner
@@ -88,9 +59,52 @@ func clonerByType(srcType reflect.Type, allowAddr bool, opts *options) clonerFun
 	case reflect.Interface:
 		return interfaceCloner
 	case reflect.Pointer:
-		return ptrCloner
+		return pointerCloner
 	default:
 		return unsupportedTypeCloner
+	}
+}
+
+// clonerToCloner 实现了 ClonerTo 接口，直接调用
+func clonerToCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	if srcVal.Kind() == reflect.Pointer && srcVal.IsNil() {
+		return nil
+	}
+	cloner, ok := srcVal.Interface().(ClonerTo)
+	if !ok {
+		return typeCloner(srcVal.Type(), false, opts)(e, fks, tgtVal, srcVal, opts)
+	}
+	if tgtVal.Kind() == reflect.Pointer {
+		return cloner.CloneTo(tgtVal.Interface())
+	}
+	if tgtVal.CanAddr() {
+		tgtAddr := tgtVal.Addr()
+		return cloner.CloneTo(tgtAddr.Interface())
+	}
+	return typeCloner(srcVal.Type(), false, opts)(e, fks, tgtVal, srcVal, opts)
+}
+
+// addrClonerToCloner 实现了 ClonerTo 接口，直接调用
+func addrClonerToCloner() clonerFunc {
+	return func(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+		if !srcVal.CanAddr() {
+			return typeCloner(srcVal.Type(), false, opts)(e, fks, tgtVal, srcVal, opts)
+		}
+		srcAddr := srcVal.Addr()
+		if srcAddr.IsNil() {
+			return typeCloner(srcVal.Type(), false, opts)(e, fks, tgtVal, srcVal, opts)
+		}
+		cloner, ok := srcAddr.Interface().(ClonerTo)
+		if !ok {
+			return typeCloner(srcVal.Type(), false, opts)(e, fks, tgtVal, srcVal, opts)
+		}
+		if tgtVal.Kind() == reflect.Pointer {
+			return cloner.CloneTo(tgtVal.Interface())
+		}
+		if tgtVal.CanAddr() {
+			return cloner.CloneTo(tgtVal.Addr().Interface())
+		}
+		return typeCloner(srcVal.Type(), false, opts)(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
@@ -415,6 +429,45 @@ func bytesCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 }
 
 /*
+interfaceCloner 克隆interface类型
+interface ----> reflect.Value ----> valueCloner
+*/
+func interfaceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	if srcVal.IsNil() {
+		return nil
+	}
+	srcVal = srcVal.Elem()
+	cloner := valueCloner(srcVal, opts)
+	return cloner(e, fks, tgtVal, srcVal, opts)
+}
+
+/*
+pointerCloner 克隆pointer类型
+pointer ----> reflect.Type ----> typeCloner
+*/
+func pointerCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	if srcVal.IsNil() {
+		return nil
+	}
+	if e.forward(); e.isTooDeep() {
+		// We're a large number of nested pointerCloner calls deep;
+		// start checking if we've run into a pointer cycle.
+		ptr := srcVal.Interface()
+		if e.isSeen(ptr) {
+			return &UnsupportedValueError{Value: srcVal, Str: fmt.Sprintf("encountered a cycle via %s", srcVal.Type())}
+		}
+		e.remember(ptr)
+		defer e.forget(ptr)
+	}
+	defer e.back()
+	cloner := typeCloner(srcVal.Type().Elem(), true, opts)
+	if err := cloner(e, fks, tgtVal, srcVal.Elem(), opts); err != nil {
+		return err
+	}
+	return nil
+}
+
+/*
 timeCloner 克隆time.Time类型
 time.Time ----> ClonerFrom
 time.Time ----> struct(time.Time)
@@ -515,7 +568,44 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 	case wrappersPBStringType:
 		return stringCloner(e, fks, tgtVal, srcVal.FieldByName("Value"), opts)
 	case wrappersPBBytesType:
-		return sliceCloner(e, fks, tgtVal, srcVal.FieldByName("Value"), opts)
+		return bytesCloner(e, fks, tgtVal, srcVal.FieldByName("Value"), opts)
+
+	case timestampPBTimestampType:
+		timestamp, _ := srcVal.Interface().(timestamppb.Timestamp)
+		return timeCloner(e, fks, tgtVal, reflect.ValueOf(timestamp.AsTime()), opts)
+	case durationPBDurationType:
+		duration, _ := srcVal.Interface().(durationpb.Duration)
+		return intCloner(e, fks, tgtVal, reflect.ValueOf(duration.AsDuration()), opts)
+
+	case anyPBAnyType:
+		// TODO anypb
+		return nil
+	case emptyPBEmptyType:
+		return nil
+
+	case structPBStructType:
+		structPB, _ := srcVal.Interface().(structpb.Struct)
+		return mapCloner(e, fks, tgtVal, reflect.ValueOf(structPB.AsMap()), opts)
+	case structPBValueType:
+		valuePB, _ := srcVal.Interface().(structpb.Value)
+		return interfaceCloner(e, fks, tgtVal, reflect.ValueOf(valuePB.AsInterface()), opts)
+	case structPBNullValueType:
+		return nil
+	case structPBNumberValueType:
+		numberPB, _ := srcVal.Interface().(structpb.Value_NumberValue)
+		return floatCloner(e, fks, tgtVal, reflect.ValueOf(numberPB.NumberValue), opts)
+	case structPBStringValueType:
+		stringPB, _ := srcVal.Interface().(structpb.Value_StringValue)
+		return stringCloner(e, fks, tgtVal, reflect.ValueOf(stringPB.StringValue), opts)
+	case structPBBoolValueType:
+		boolPB, _ := srcVal.Interface().(structpb.Value_BoolValue)
+		return boolCloner(e, fks, tgtVal, reflect.ValueOf(boolPB.BoolValue), opts)
+	case structPBStructValueType:
+		structPB, _ := srcVal.Interface().(structpb.Value_StructValue)
+		return mapCloner(e, fks, tgtVal, reflect.ValueOf(structPB.StructValue.AsMap()), opts)
+	case structPBListValueType:
+		listPB, _ := srcVal.Interface().(structpb.Value_ListValue)
+		return sliceCloner(e, fks, tgtVal, reflect.ValueOf(listPB.ListValue.AsSlice()), opts)
 
 	default:
 		cloner, tv := indirectValue(tgtVal)
@@ -840,7 +930,7 @@ func mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 	}
 
 	if e.forward(); e.isTooDeep() {
-		// We're a large number of nested ptrCloner.encode calls deep;
+		// We're a large number of nested pointerCloner.encode calls deep;
 		// start checking if we've run into a pointer cycle.
 		ptr := srcVal.UnsafePointer()
 		if e.isSeen(ptr) {
@@ -907,12 +997,12 @@ func map2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, 
 		}
 		vVal := mapElem
 
-		if err := clonerByType(pair.vVal.Type(), true, opts)(e, append(slices.Clone(fks), pair.keyStr), vVal, pair.vVal, opts); err != nil {
+		if err := typeCloner(pair.vVal.Type(), true, opts)(e, append(slices.Clone(fks), pair.keyStr), vVal, pair.vVal, opts); err != nil {
 			return err
 		}
 
 		kVal := reflect.New(tgtType.Key())
-		if err := clonerByType(pair.kVal.Type(), true, opts)(e, append(slices.Clone(fks), pair.keyStr), kVal, pair.kVal, opts); err != nil {
+		if err := typeCloner(pair.kVal.Type(), true, opts)(e, append(slices.Clone(fks), pair.keyStr), kVal, pair.kVal, opts); err != nil {
 			return err
 		}
 		kVal = kVal.Elem()
@@ -932,7 +1022,7 @@ func map2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, 
 		return err
 	}
 	for _, pair := range pairs {
-		valueCloner := clonerByType(pair.vVal.Type(), true, opts)
+		valueCloner := typeCloner(pair.vVal.Type(), true, opts)
 
 		var vVal reflect.Value
 		switch pair.vVal.Kind() {
@@ -980,7 +1070,7 @@ func map2StructCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 			continue
 		}
 		tVal := tgtVal.FieldByIndex(tgtField.index)
-		valueCloner := clonerByType(pair.vVal.Type(), true, opts)
+		valueCloner := typeCloner(pair.vVal.Type(), true, opts)
 		if err := valueCloner(e, append(slices.Clone(fks), pair.keyStr), tVal, pair.vVal, opts); err != nil {
 			return err
 		}
@@ -1006,7 +1096,7 @@ func sliceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 	}
 
 	if e.forward(); e.isTooDeep() {
-		// We're a large number of nested ptrCloner.encode calls deep;
+		// We're a large number of nested pointerCloner.encode calls deep;
 		// start checking if we've run into a pointer cycle.
 		// Here we use a struct to memorize the pointer to the first element of the slice
 		// and its length.
@@ -1039,7 +1129,7 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 			tv.Set(reflect.MakeSlice(tv.Type(), srcLen, srcLen))
 			tv.SetLen(0)
 		}
-		elemCloner := clonerByType(srcVal.Type().Elem(), true, opts)
+		elemCloner := typeCloner(srcVal.Type().Elem(), true, opts)
 		for i := 0; i < srcVal.Len(); i++ {
 			if tv.Kind() == reflect.Slice {
 				tv.SetLen(i + 1)
@@ -1074,7 +1164,7 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 }
 
 func array2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	elemEnc := clonerByType(tgtVal.Type().Elem(), true, opts)
+	elemEnc := typeCloner(tgtVal.Type().Elem(), true, opts)
 	srcLen := srcVal.Len()
 	// 创建一个切片
 	tgtSlice := make([]any, 0, srcLen)
@@ -1090,39 +1180,6 @@ func array2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value
 	}
 	// 设置tgtVal
 	tgtVal.Set(reflect.ValueOf(tgtSlice))
-	return nil
-}
-
-func interfaceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	if srcVal.IsNil() {
-		return nil
-	}
-	if !tgtVal.IsValid() {
-		return nil
-	}
-	srcVal = srcVal.Elem()
-	return clonerByValue(srcVal, opts)(e, fks, tgtVal, srcVal, opts)
-}
-
-func ptrCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	if srcVal.IsNil() {
-		return nil
-	}
-	if e.forward(); e.isTooDeep() {
-		// We're a large number of nested ptrCloner.encode calls deep;
-		// start checking if we've run into a pointer cycle.
-		ptr := srcVal.Interface()
-		if e.isSeen(ptr) {
-			return &UnsupportedValueError{Value: srcVal, Str: fmt.Sprintf("encountered a cycle via %s", srcVal.Type())}
-		}
-		e.remember(ptr)
-		defer e.forget(ptr)
-	}
-	defer e.back()
-	cloner := clonerByType(srcVal.Type().Elem(), true, opts)
-	if err := cloner(e, fks, tgtVal, srcVal.Elem(), opts); err != nil {
-		return err
-	}
 	return nil
 }
 

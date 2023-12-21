@@ -45,7 +45,7 @@ func newCloneContext() *cloneContext {
 	if v := cloneContextPool.Get(); v != nil {
 		e := v.(*cloneContext)
 		if len(e.ptrSeen) > 0 {
-			panic("ptrCloner.encode should have emptied ptrSeen via defers")
+			panic("pointerCloner.encode should have emptied ptrSeen via defers")
 		}
 		e.ptrLevel = 0
 		return e
