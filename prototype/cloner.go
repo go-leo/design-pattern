@@ -4,7 +4,7 @@ import (
 	"encoding"
 	"errors"
 	"fmt"
-	"github.com/go-leo/gox/convx"
+	"github.com/go-leo/gox/mathx"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -92,7 +92,7 @@ func addrClonerToCloner() clonerFunc {
 		}
 		srcAddr := srcVal.Addr()
 		if srcAddr.IsNil() {
-			return typeCloner(srcVal.Type(), false, opts)(e, fks, tgtVal, srcVal, opts)
+			return nil
 		}
 		cloner, ok := srcAddr.Interface().(ClonerTo)
 		if !ok {
@@ -510,6 +510,97 @@ func timeCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 		return setFloat(fks, tv, float64(opts.UnixTime(t)))
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, timeCloner)
+	default:
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	}
+}
+
+/*
+sliceCloner 克隆slice类型,
+[]byte ----> bytesCloner
+slice ----> ClonerFrom
+slice ----> slice,
+slice ----> array,
+slice ----> any(slice),
+slice ----> pointer,
+*/
+func sliceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	srcType := srcVal.Type()
+	if srcType.Elem().Kind() == reflect.Uint8 {
+		return bytesCloner(e, fks, tgtVal, srcVal, opts)
+	}
+	if srcVal.IsNil() {
+		return nil
+	}
+	if e.forward(); e.isTooDeep() {
+		// We're a large number of nested pointerCloner.encode calls deep;
+		// start checking if we've run into a pointer cycle.
+		// Here we use a struct to memorize the pointer to the first element of the slice
+		// and its length.
+		ptr := struct {
+			ptr interface{} // always an unsafe.Pointer, but avoids a dependency on package unsafe
+			len int
+		}{ptr: srcVal.UnsafePointer(), len: srcVal.Len()}
+		if e.isSeen(ptr) {
+			return &UnsupportedValueError{Value: srcVal, Str: fmt.Sprintf("encountered a cycle via %s", srcVal.Type())}
+		}
+		e.remember(ptr)
+		defer e.forget(ptr)
+	}
+	defer e.back()
+	return arrayCloner(e, fks, tgtVal, srcVal, opts)
+}
+
+/*
+arrayCloner 克隆array类型,
+array ----> ClonerFrom
+array ----> array,
+array ----> slice,
+array ----> any(slice),
+array ----> pointer,
+*/
+func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	if !tgtVal.IsValid() {
+		return nil
+	}
+	cloner, tv := indirectValue(tgtVal)
+	if cloner != nil {
+		return cloner.CloneFrom(srcVal.Interface())
+	}
+	switch tv.Kind() {
+	case reflect.Array, reflect.Slice:
+		srcLen := srcVal.Len()
+		if tv.Kind() == reflect.Slice {
+			tv.Set(reflect.MakeSlice(tv.Type(), srcLen, srcLen))
+		}
+		tgtLen := tv.Len()
+		minLen := mathx.Min(srcLen, tgtLen)
+		elemCloner := typeCloner(srcVal.Type().Elem(), true, opts)
+		for i := 0; i < minLen; i++ {
+			if err := elemCloner(e, append(slices.Clone(fks), strconv.Itoa(i)), tv.Index(i), srcVal.Index(i), opts); err != nil {
+				return err
+			}
+		}
+		return nil
+	case reflect.Interface:
+		if tv.NumMethod() == 0 {
+			srcLen := srcVal.Len()
+			// 创建一个切片
+			tgtSlice := make([]any, srcLen)
+			elemCloner := typeCloner(srcVal.Type().Elem(), true, opts)
+			// 将src的元素逐个拷贝到tgt
+			for i := 0; i < srcLen; i++ {
+				if err := elemCloner(e, append(slices.Clone(fks), strconv.Itoa(i)), reflect.ValueOf(&tgtSlice[i]), srcVal.Index(i), opts); err != nil {
+					return err
+				}
+			}
+			// 设置tgtVal
+			tv.Set(reflect.ValueOf(tgtSlice))
+			return nil
+		}
+		return hookCloner(e, fks, tgtVal, srcVal, opts)
+	case reflect.Pointer:
+		return setPointer(e, fks, tgtVal, srcVal, opts, tv, arrayCloner)
 	default:
 		return hookCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -1075,111 +1166,6 @@ func map2StructCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 			return err
 		}
 	}
-	return nil
-}
-
-// sliceCloner just wraps an arrayCloner, checking to make sure the value isn't nil.
-func sliceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	srcType := srcVal.Type()
-	if srcType.Elem().Kind() == reflect.Uint8 {
-		return bytesCloner(e, fks, tgtVal, srcVal, opts)
-	}
-	if srcVal.IsNil() {
-		return nil
-	}
-	if !tgtVal.IsValid() {
-		return nil
-	}
-	cloner, tv := indirectValue(tgtVal)
-	if cloner != nil {
-		return cloner.CloneFrom(srcVal.Interface())
-	}
-
-	if e.forward(); e.isTooDeep() {
-		// We're a large number of nested pointerCloner.encode calls deep;
-		// start checking if we've run into a pointer cycle.
-		// Here we use a struct to memorize the pointer to the first element of the slice
-		// and its length.
-		ptr := struct {
-			ptr interface{} // always an unsafe.Pointer, but avoids a dependency on package unsafe
-			len int
-		}{ptr: srcVal.UnsafePointer(), len: srcVal.Len()}
-		if e.isSeen(ptr) {
-			return &UnsupportedValueError{Value: srcVal, Str: fmt.Sprintf("encountered a cycle via %s", srcVal.Type())}
-		}
-		e.remember(ptr)
-		defer e.forget(ptr)
-	}
-	defer e.back()
-	return arrayCloner(e, fks, tv, srcVal, opts)
-}
-
-func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	if !tgtVal.IsValid() {
-		return nil
-	}
-	cloner, tv := indirectValue(tgtVal)
-	if cloner != nil {
-		return cloner.CloneFrom(srcVal.Interface())
-	}
-	switch tv.Kind() {
-	case reflect.Array, reflect.Slice:
-		srcLen := srcVal.Len()
-		if tv.Kind() == reflect.Slice {
-			tv.Set(reflect.MakeSlice(tv.Type(), srcLen, srcLen))
-			tv.SetLen(0)
-		}
-		elemCloner := typeCloner(srcVal.Type().Elem(), true, opts)
-		for i := 0; i < srcVal.Len(); i++ {
-			if tv.Kind() == reflect.Slice {
-				tv.SetLen(i + 1)
-			}
-			if i >= tv.Len() {
-				// Ran out of fixed array: skip.
-				continue
-			}
-			tgtItem := tv.Index(i)
-			srcItem := srcVal.Index(i)
-			if err := elemCloner(e, append(slices.Clone(fks), strconv.FormatInt(int64(i), 10)), tgtItem, srcItem, opts); err != nil {
-				return err
-			}
-			tv.Index(i).Set(tgtItem)
-		}
-		return nil
-	case reflect.Interface:
-		if tv.NumMethod() == 0 {
-			return array2AnyCloner(e, fks, tv, srcVal, opts)
-		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	case reflect.Pointer:
-		if tv.IsNil() {
-			tv.Set(reflect.New(tv.Type().Elem()))
-			tv = tv.Elem()
-			return arrayCloner(e, fks, tv, srcVal, opts)
-		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
-	}
-}
-
-func array2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	elemEnc := typeCloner(tgtVal.Type().Elem(), true, opts)
-	srcLen := srcVal.Len()
-	// 创建一个切片
-	tgtSlice := make([]any, 0, srcLen)
-	// 将src的元素逐个拷贝到tgt
-	for i := 0; i < srcLen; i++ {
-		var tgtItem any
-		tgtItemVal := reflect.ValueOf(&tgtItem)
-		srcItemVal := srcVal.Index(i)
-		if err := elemEnc(e, append(slices.Clone(fks), convx.ToString(i)), tgtItemVal, srcItemVal, opts); err != nil {
-			return err
-		}
-		tgtSlice = append(tgtSlice, tgtItem)
-	}
-	// 设置tgtVal
-	tgtVal.Set(reflect.ValueOf(tgtSlice))
 	return nil
 }
 

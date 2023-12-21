@@ -10,6 +10,8 @@ github.com/go-leo/gox v0.0.0-20231030083051-2c86c96dc91f h1:p/nFVcUnNT1q5FEzvPZj
 github.com/go-leo/gox v0.0.0-20231030083051-2c86c96dc91f/go.mod h1:688yJgtEd8KLajT1sjFdZ9Axqp7xfX9BGmmJQIW1xEs=
 github.com/go-leo/gox v0.0.0-20231110101712-f754b978b795 h1:75E0NZdfsDaAl/OozXApjrD07nlL3U6LE6tXzWpu6lA=
 github.com/go-leo/gox v0.0.0-20231110101712-f754b978b795/go.mod h1:688yJgtEd8KLajT1sjFdZ9Axqp7xfX9BGmmJQIW1xEs=
+github.com/go-leo/gox v0.0.0-20231221120635-7f7d03735c2c h1:cjzHoLJ5b2xXjnN+HnFnPY7BUf0NyAYqDbgVlgLSxSw=
+github.com/go-leo/gox v0.0.0-20231221120635-7f7d03735c2c/go.mod h1:688yJgtEd8KLajT1sjFdZ9Axqp7xfX9BGmmJQIW1xEs=
 github.com/golang/protobuf v1.5.0/go.mod h1:FsONVRAS9T7sI+LIUmWTfcYkHO4aIWwzhcaSAoJOfIk=
 github.com/golang/protobuf v1.5.3 h1:KhyjKVUg7Usr/dYsdSqoFveMYd5ko72D+zANwlG1mmg=
 github.com/golang/protobuf v1.5.3/go.mod h1:XVQd3VNwM+JqD3oG2Ue2ip4fOMUkwXdXDdiuN0vRsmY=
