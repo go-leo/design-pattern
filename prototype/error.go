@@ -14,11 +14,13 @@ const (
 	Overflow            = 3
 	NegativeNumber      = 4
 	StringParse         = 5
+	PointerCycle        = 6
 )
 
 type Error struct {
 	Code       Code
 	FullKeys   []string
+	SourceType reflect.Type
 	TargetType reflect.Type
 	Value      string
 	err        error
@@ -40,6 +42,8 @@ func (e Error) Error() string {
 		return fmt.Sprintf("prototype: negative number error, %s cannot Clone %s into Go value of type %s", keys, e.Value, e.TargetType.String())
 	case StringParse:
 		return fmt.Sprintf("prototype: parse string error, %s cannot Clone %s into Go value of type %s, %v", keys, e.Value, e.TargetType.String(), e.err)
+	case PointerCycle:
+		return fmt.Sprintf("prototype: pointer cycle error, encountered a cycle via %s", e.SourceType.String())
 	default:
 		return ""
 	}
@@ -67,6 +71,10 @@ func newNegativeNumberError(fks []string, tgtType reflect.Type, value string) er
 
 func newStringParseError(fks []string, tgtType reflect.Type, value string, err error) error {
 	return Error{Code: StringParse, FullKeys: fks, TargetType: tgtType, Value: value, err: err}
+}
+
+func newPointerCycleError(fks []string, srcType reflect.Type) error {
+	return Error{Code: PointerCycle, FullKeys: fks, SourceType: srcType}
 }
 
 type UnsupportedTypeError struct {

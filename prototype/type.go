@@ -71,11 +71,6 @@ var (
 	structPBListValueType   = reflect.TypeOf(structpb.Value_ListValue{})
 )
 
-//func init() {
-//	timestamp := timestamppb.New(time.Now())
-//	timestamp.
-//}
-
 var (
 	intKinds   = []reflect.Kind{reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64}
 	uintKinds  = []reflect.Kind{reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr}

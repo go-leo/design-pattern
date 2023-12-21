@@ -1,6 +1,9 @@
 package prototype
 
-import "sync"
+import (
+	"reflect"
+	"sync"
+)
 
 const startDetectingCyclesAfter = 1000
 
@@ -37,6 +40,21 @@ func (e *cloneContext) remember(ptr any) {
 
 func (e *cloneContext) forget(ptr any) {
 	delete(e.ptrSeen, ptr)
+}
+
+func (e *cloneContext) checkPointerCycle(ptrFunc func(srcVal reflect.Value) any, cloner clonerFunc) clonerFunc {
+	return func(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+		if e.forward(); e.isTooDeep() {
+			ptr := ptrFunc(srcVal)
+			if e.isSeen(ptr) {
+				return newPointerCycleError(fks, srcVal.Type())
+			}
+			e.remember(ptr)
+			defer e.forget(ptr)
+		}
+		defer e.back()
+		return cloner(e, fks, tgtVal, srcVal, opts)
+	}
 }
 
 var cloneContextPool sync.Pool

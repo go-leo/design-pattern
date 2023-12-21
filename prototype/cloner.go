@@ -449,22 +449,11 @@ func pointerCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, 
 	if srcVal.IsNil() {
 		return nil
 	}
-	if e.forward(); e.isTooDeep() {
-		// We're a large number of nested pointerCloner calls deep;
-		// start checking if we've run into a pointer cycle.
-		ptr := srcVal.Interface()
-		if e.isSeen(ptr) {
-			return &UnsupportedValueError{Value: srcVal, Str: fmt.Sprintf("encountered a cycle via %s", srcVal.Type())}
-		}
-		e.remember(ptr)
-		defer e.forget(ptr)
-	}
-	defer e.back()
-	cloner := typeCloner(srcVal.Type().Elem(), true, opts)
-	if err := cloner(e, fks, tgtVal, srcVal.Elem(), opts); err != nil {
-		return err
-	}
-	return nil
+	cloner := e.checkPointerCycle(
+		func(srcVal reflect.Value) any { return srcVal.Interface() },
+		typeCloner(srcVal.Type().Elem(), true, opts),
+	)
+	return cloner(e, fks, tgtVal, srcVal.Elem(), opts)
 }
 
 /*
@@ -532,23 +521,19 @@ func sliceCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 	if srcVal.IsNil() {
 		return nil
 	}
-	if e.forward(); e.isTooDeep() {
-		// We're a large number of nested pointerCloner.encode calls deep;
-		// start checking if we've run into a pointer cycle.
-		// Here we use a struct to memorize the pointer to the first element of the slice
-		// and its length.
-		ptr := struct {
-			ptr interface{} // always an unsafe.Pointer, but avoids a dependency on package unsafe
-			len int
-		}{ptr: srcVal.UnsafePointer(), len: srcVal.Len()}
-		if e.isSeen(ptr) {
-			return &UnsupportedValueError{Value: srcVal, Str: fmt.Sprintf("encountered a cycle via %s", srcVal.Type())}
-		}
-		e.remember(ptr)
-		defer e.forget(ptr)
-	}
-	defer e.back()
-	return arrayCloner(e, fks, tgtVal, srcVal, opts)
+	cloner := e.checkPointerCycle(
+		func(srcVal reflect.Value) any {
+			return struct {
+				ptr interface{}
+				len int
+			}{
+				ptr: srcVal.UnsafePointer(),
+				len: srcVal.Len(),
+			}
+		},
+		arrayCloner,
+	)
+	return cloner(e, fks, tgtVal, srcVal, opts)
 }
 
 /*
@@ -1014,23 +999,18 @@ func mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 	if srcVal.IsNil() {
 		return nil
 	}
+	cloner := e.checkPointerCycle(
+		func(srcVal reflect.Value) any { return srcVal.UnsafePointer() },
+		_mapCloner,
+	)
+	return cloner(e, fks, tgtVal, srcVal, opts)
+}
 
+func _mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	cloner, tv := indirectValue(tgtVal)
 	if cloner != nil {
 		return cloner.CloneFrom(srcVal.Interface())
 	}
-
-	if e.forward(); e.isTooDeep() {
-		// We're a large number of nested pointerCloner.encode calls deep;
-		// start checking if we've run into a pointer cycle.
-		ptr := srcVal.UnsafePointer()
-		if e.isSeen(ptr) {
-			return &UnsupportedValueError{Value: srcVal, Str: fmt.Sprintf("encountered a cycle via %s", srcVal.Type())}
-		}
-		e.remember(ptr)
-		defer e.forget(ptr)
-	}
-	defer e.back()
 
 	switch tv.Kind() {
 	case reflect.Struct:
