@@ -9,19 +9,20 @@ import (
 type Code int
 
 const (
-	NonPointer     Code = 1
-	Nil                 = 2
-	Overflow            = 3
-	NegativeNumber      = 4
-	StringParse         = 5
-	PointerCycle        = 6
+	NonPointer      Code = 1
+	Nil                  = 2
+	Overflow             = 3
+	NegativeNumber       = 4
+	StringParse          = 5
+	PointerCycle         = 6
+	UnsupportedType      = 7
 )
 
 type Error struct {
 	Code       Code
 	FullKeys   []string
-	SourceType reflect.Type
 	TargetType reflect.Type
+	SourceType reflect.Type
 	Value      string
 	err        error
 }
@@ -37,13 +38,15 @@ func (e Error) Error() string {
 		}
 		return fmt.Sprintf("prototype: nil error, target is (%s)(nil)", e.TargetType.String())
 	case Overflow:
-		return fmt.Sprintf("prototype: overflow error, %s, cannot Clone %s into Go value of type %s", keys, e.Value, e.TargetType.String())
+		return fmt.Sprintf("prototype: overflow error, %s, cannot Clone %s into target type %s", keys, e.Value, e.TargetType.String())
 	case NegativeNumber:
-		return fmt.Sprintf("prototype: negative number error, %s cannot Clone %s into Go value of type %s", keys, e.Value, e.TargetType.String())
+		return fmt.Sprintf("prototype: negative number error, %s, cannot Clone %s into target type %s", keys, e.Value, e.TargetType.String())
 	case StringParse:
-		return fmt.Sprintf("prototype: parse string error, %s cannot Clone %s into Go value of type %s, %v", keys, e.Value, e.TargetType.String(), e.err)
+		return fmt.Sprintf("prototype: parse string error, %s, cannot Clone %s into target type %s, %v", keys, e.Value, e.TargetType.String(), e.err)
 	case PointerCycle:
 		return fmt.Sprintf("prototype: pointer cycle error, encountered a cycle via %s", e.SourceType.String())
+	case UnsupportedType:
+		return fmt.Sprintf("prototype: unsupported type error, %s, cannot Clone source type %s into  target type %s", keys, e.SourceType.String(), e.SourceType.String())
 	default:
 		return ""
 	}
@@ -77,13 +80,8 @@ func newPointerCycleError(fks []string, srcType reflect.Type) error {
 	return Error{Code: PointerCycle, FullKeys: fks, SourceType: srcType}
 }
 
-type UnsupportedTypeError struct {
-	SourceType reflect.Type
-	TargetType reflect.Type
-}
-
-func (e *UnsupportedTypeError) Error() string {
-	return "prototype: unsupported type: " + e.SourceType.String() + " to " + e.TargetType.String()
+func newUnsupportedTypeError(fks []string, tgtType reflect.Type, srcType reflect.Type) error {
+	return Error{Code: UnsupportedType, FullKeys: fks, TargetType: tgtType, SourceType: srcType}
 }
 
 // An UnsupportedValueError is returned by Clone when attempting

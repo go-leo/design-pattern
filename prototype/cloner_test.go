@@ -209,7 +209,7 @@ func TestBoolCloner(t *testing.T) {
 
 	var tgtErr error
 	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtErr), reflect.ValueOf(srcBool), opts)
-	var utErr *UnsupportedTypeError
+	var utErr *Error
 	assert.ErrorAs(t, err, &utErr)
 	assert.Equal(t, nil, tgtErr)
 

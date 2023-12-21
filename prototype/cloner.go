@@ -1175,5 +1175,6 @@ func hookCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 			return hook(fks, tgtVal, srcVal)
 		}
 	}
-	return &UnsupportedTypeError{SourceType: srcVal.Type(), TargetType: tgtVal.Type()}
+	//return newUnsupportedTypeError(fks, srcVal.Type(), tgtVal.Type())
+	return nil
 }
