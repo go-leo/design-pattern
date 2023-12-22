@@ -9,13 +9,14 @@ import (
 type Code int
 
 const (
-	NonPointer      Code = 1
-	Nil                  = 2
-	Overflow             = 3
-	NegativeNumber       = 4
-	StringParse          = 5
-	PointerCycle         = 6
-	UnsupportedType      = 7
+	NonPointer           Code = 1
+	Nil                       = 2
+	Overflow                  = 3
+	NegativeNumber            = 4
+	StringParse               = 5
+	PointerCycle              = 6
+	UnsupportedType           = 7
+	FailedConvertScanner      = 8
 )
 
 type Error struct {
@@ -46,7 +47,9 @@ func (e Error) Error() string {
 	case PointerCycle:
 		return fmt.Sprintf("prototype: pointer cycle error, encountered a cycle via %s", e.SourceType.String())
 	case UnsupportedType:
-		return fmt.Sprintf("prototype: unsupported type error, %s, cannot Clone source type %s into  target type %s", keys, e.SourceType.String(), e.SourceType.String())
+		return fmt.Sprintf("prototype: unsupported type error, %s, cannot Clone source type %s into  target type %s", keys, e.SourceType.String(), e.TargetType.String())
+	case FailedConvertScanner:
+		return fmt.Sprintf("prototype: failed to convert scanner error, %s, target type %s", keys, e.TargetType.String())
 	default:
 		return ""
 	}
@@ -82,6 +85,10 @@ func newPointerCycleError(fks []string, srcType reflect.Type) error {
 
 func newUnsupportedTypeError(fks []string, tgtType reflect.Type, srcType reflect.Type) error {
 	return Error{Code: UnsupportedType, FullKeys: fks, TargetType: tgtType, SourceType: srcType}
+}
+
+func newFailedConvertScannerError(fks []string, tgtType reflect.Type) error {
+	return Error{Code: FailedConvertScanner, FullKeys: fks, TargetType: tgtType}
 }
 
 // An UnsupportedValueError is returned by Clone when attempting

@@ -134,22 +134,22 @@ func boolCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 		tv.SetBool(b)
 		return nil
 	case reflect.Interface:
-		return setAny(e, fks, tgtVal, srcVal, opts, tv, b)
+		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, b)
 	case reflect.String:
 		tv.SetString(strconv.FormatBool(b))
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return setInt(fks, tv, int64(boolMap[b]))
+		return setInt(fks, tv, int64(boolIntMap[b]))
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return setInt2Uint(fks, tv, int64(boolMap[b]))
+		return setInt2Uint(fks, tv, int64(boolIntMap[b]))
 	case reflect.Float32, reflect.Float64:
-		return setFloat(fks, tv, float64(boolMap[b]))
+		return setFloat(fks, tv, float64(boolIntMap[b]))
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, boolCloner)
 	case reflect.Struct:
-		return setStruct(e, fks, tv, srcVal, opts, b)
+		return setBoolStruct(e, fks, tv, srcVal, opts, b)
 	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
@@ -178,7 +178,7 @@ func intCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return setInt(fks, tv, i)
 	case reflect.Interface:
-		return setAny(e, fks, tgtVal, srcVal, opts, tv, i)
+		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, i)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		return setInt2Uint(fks, tv, i)
 	case reflect.Float32, reflect.Float64:
@@ -192,9 +192,9 @@ func intCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, intCloner)
 	case reflect.Struct:
-		return setStruct(e, fks, tv, srcVal, opts, i)
+		return setIntStruct(e, fks, tv, srcVal, opts, i)
 	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
@@ -223,7 +223,7 @@ func uintCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		return setUint(fks, tv, u)
 	case reflect.Interface:
-		return setAny(e, fks, tgtVal, srcVal, opts, tv, u)
+		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, u)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return setUint2Int(fks, tv, u)
 	case reflect.Float32, reflect.Float64:
@@ -237,9 +237,9 @@ func uintCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, uintCloner)
 	case reflect.Struct:
-		return setStruct(e, fks, tv, srcVal, opts, u)
+		return setUintStruct(e, fks, tv, srcVal, opts, u)
 	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
@@ -268,7 +268,7 @@ func floatCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 	case reflect.Float32, reflect.Float64:
 		return setFloat(fks, tv, f)
 	case reflect.Interface:
-		return setAny(e, fks, tgtVal, srcVal, opts, tv, f)
+		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, f)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return setFloat2Int(fks, tv, f)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
@@ -282,9 +282,9 @@ func floatCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, floatCloner)
 	case reflect.Struct:
-		return setStruct(e, fks, tv, srcVal, opts, f)
+		return setFloatStruct(e, fks, tv, srcVal, opts, f)
 	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
@@ -319,9 +319,9 @@ func stringCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 			tv.SetBytes([]byte(s))
 			return nil
 		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.Interface:
-		return setAny(e, fks, tgtVal, srcVal, opts, tv, s)
+		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, s)
 	case reflect.Bool:
 		b, err := strconv.ParseBool(s)
 		if err != nil {
@@ -352,7 +352,7 @@ func stringCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 	case reflect.Struct:
 		return setStruct(e, fks, tv, srcVal, opts, s)
 	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
@@ -384,12 +384,12 @@ func bytesCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 			tv.SetBytes(bs)
 			return nil
 		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.String:
 		tv.SetString(string(bs))
 		return nil
 	case reflect.Interface:
-		return setAny(e, fks, tgtVal, srcVal, opts, tv, bs)
+		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, bs)
 	case reflect.Bool:
 		s := string(bs)
 		b, err := strconv.ParseBool(s)
@@ -424,7 +424,7 @@ func bytesCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 	case reflect.Struct:
 		return setStruct(e, fks, tv, srcVal, opts, bs)
 	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
@@ -481,7 +481,7 @@ func timeCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 	case reflect.Struct:
 		return setStruct(e, fks, tv, srcVal, opts, t)
 	case reflect.Interface:
-		return setAny(e, fks, tgtVal, srcVal, opts, tv, t)
+		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, t)
 	case reflect.String:
 		tv.SetString(t.Format(time.RFC3339))
 		return nil
@@ -490,17 +490,17 @@ func timeCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 			tv.SetBytes([]byte(t.Format(time.RFC3339)))
 			return nil
 		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return setInt(fks, tv, opts.UnixTime(t))
+		return setInt(fks, tv, opts.Unix(t))
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return setUint(fks, tv, uint64(opts.UnixTime(t)))
+		return setUint(fks, tv, uint64(opts.Unix(t)))
 	case reflect.Float32, reflect.Float64:
-		return setFloat(fks, tv, float64(opts.UnixTime(t)))
+		return setFloat(fks, tv, float64(opts.Unix(t)))
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, timeCloner)
 	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
@@ -583,11 +583,11 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 			tv.Set(reflect.ValueOf(tgtSlice))
 			return nil
 		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, arrayCloner)
 	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
@@ -662,6 +662,9 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 	case structPBStructType:
 		structPB, _ := srcVal.Interface().(structpb.Struct)
 		return mapCloner(e, fks, tgtVal, reflect.ValueOf(structPB.AsMap()), opts)
+	case structPBListType:
+		structPB, _ := srcVal.Interface().(structpb.ListValue)
+		return sliceCloner(e, fks, tgtVal, reflect.ValueOf(structPB.AsSlice()), opts)
 	case structPBValueType:
 		valuePB, _ := srcVal.Interface().(structpb.Value)
 		return interfaceCloner(e, fks, tgtVal, reflect.ValueOf(valuePB.AsInterface()), opts)
@@ -695,7 +698,7 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 			if tv.NumMethod() == 0 {
 				return struct2AnyCloner(e, fks, tv, srcVal, opts)
 			}
-			return hookCloner(e, fks, tgtVal, srcVal, opts)
+			return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 		case reflect.Map:
 			t := tv.Type()
 			switch t.Key().Kind() {
@@ -715,11 +718,11 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 					return struct2MapCloner(e, fks, tv, srcVal, opts)
 				}
 			}
-			return hookCloner(e, fks, tgtVal, srcVal, opts)
+			return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 		case reflect.Pointer:
 			return setPointer(e, fks, tgtVal, srcVal, opts, tv, structCloner)
 		default:
-			return hookCloner(e, fks, tgtVal, srcVal, opts)
+			return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 		}
 	}
 }
@@ -1019,7 +1022,7 @@ func _mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 		if tv.NumMethod() == 0 {
 			return map2AnyCloner(e, fks, tv, srcVal, opts)
 		}
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.Map:
 		if tv.IsNil() {
 			tv.Set(reflect.MakeMap(tv.Type()))
@@ -1031,9 +1034,9 @@ func _mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 			tv = tv.Elem()
 			return mapCloner(e, fks, tv, srcVal, opts)
 		}
-		return hookCloner(e, fks, tv, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tv, srcVal, opts)
 	default:
-		return hookCloner(e, fks, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
 }
 
@@ -1175,6 +1178,5 @@ func hookCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 			return hook(fks, tgtVal, srcVal)
 		}
 	}
-	//return newUnsupportedTypeError(fks, srcVal.Type(), tgtVal.Type())
-	return nil
+	return newUnsupportedTypeError(fks, srcVal.Type(), tgtVal.Type())
 }

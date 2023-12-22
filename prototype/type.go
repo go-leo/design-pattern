@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding"
 	"fmt"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -45,13 +46,13 @@ var (
 	sqlNullStringType  = reflect.TypeOf(sql.NullString{})
 	sqlNullTimeType    = reflect.TypeOf(sql.NullTime{})
 
-	wrappersPBDoubleType = reflect.TypeOf(wrapperspb.DoubleValue{})
-	wrappersPBFloatType  = reflect.TypeOf(wrapperspb.FloatValue{})
+	wrappersPBBoolType   = reflect.TypeOf(wrapperspb.BoolValue{})
 	wrappersPBInt32Type  = reflect.TypeOf(wrapperspb.Int32Value{})
 	wrappersPBInt64Type  = reflect.TypeOf(wrapperspb.Int64Value{})
 	wrappersPBUint32Type = reflect.TypeOf(wrapperspb.UInt32Value{})
 	wrappersPBUint64Type = reflect.TypeOf(wrapperspb.UInt64Value{})
-	wrappersPBBoolType   = reflect.TypeOf(wrapperspb.BoolValue{})
+	wrappersPBFloatType  = reflect.TypeOf(wrapperspb.FloatValue{})
+	wrappersPBDoubleType = reflect.TypeOf(wrapperspb.DoubleValue{})
 	wrappersPBStringType = reflect.TypeOf(wrapperspb.StringValue{})
 	wrappersPBBytesType  = reflect.TypeOf(wrapperspb.BytesValue{})
 
@@ -62,14 +63,19 @@ var (
 	emptyPBEmptyType = reflect.TypeOf(emptypb.Empty{})
 
 	structPBStructType      = reflect.TypeOf(structpb.Struct{})
+	structPBListType        = reflect.TypeOf(structpb.ListValue{})
 	structPBValueType       = reflect.TypeOf(structpb.Value{})
 	structPBNullValueType   = reflect.TypeOf(structpb.Value_NullValue{})
 	structPBNumberValueType = reflect.TypeOf(structpb.Value_NumberValue{})
-	structPBStringValueType = reflect.TypeOf(structpb.Value_StringValue{})
 	structPBBoolValueType   = reflect.TypeOf(structpb.Value_BoolValue{})
+	structPBStringValueType = reflect.TypeOf(structpb.Value_StringValue{})
 	structPBStructValueType = reflect.TypeOf(structpb.Value_StructValue{})
 	structPBListValueType   = reflect.TypeOf(structpb.Value_ListValue{})
 )
+
+type anyPBMarshalFrom interface {
+	MarshalFrom(m proto.Message) error
+}
 
 var (
 	intKinds   = []reflect.Kind{reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64}
@@ -100,7 +106,7 @@ func indirectType(t reflect.Type) reflect.Type {
 	return t
 }
 
-var boolMap = map[bool]int{
+var boolIntMap = map[bool]int{
 	false: 0,
 	true:  1,
 }

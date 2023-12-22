@@ -17,7 +17,8 @@ type options struct {
 	TargetTagKey string
 	DeepClone    bool
 	NameComparer func(t, s string) bool
-	UnixTime     func(t time.Time) int64
+	Unix         func(t time.Time) int64
+	Time         func(i int64) time.Time
 }
 
 func (o *options) apply(opts ...Option) *options {
@@ -31,8 +32,11 @@ func (o *options) correct() *options {
 	if o.NameComparer == nil {
 		o.NameComparer = strings.EqualFold
 	}
-	if o.UnixTime == nil {
-		o.UnixTime = func(t time.Time) int64 { return t.Unix() }
+	if o.Unix == nil {
+		o.Unix = func(t time.Time) int64 { return t.Unix() }
+	}
+	if o.Time == nil {
+		o.Time = func(i int64) time.Time { return time.Unix(i, 0) }
 	}
 	return o
 }

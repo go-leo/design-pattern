@@ -3,8 +3,11 @@ package prototype
 import (
 	"database/sql"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	"math"
 	"reflect"
 	"strconv"
@@ -209,19 +212,71 @@ func TestBoolCloner(t *testing.T) {
 
 	var tgtErr error
 	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtErr), reflect.ValueOf(srcBool), opts)
-	var utErr *Error
+	var utErr Error
 	assert.ErrorAs(t, err, &utErr)
-	assert.Equal(t, nil, tgtErr)
+
+	var tgtSqlNullBool sql.NullBool
+	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtSqlNullBool), reflect.ValueOf(srcBool), opts)
+	assert.NoError(t, err)
+	assert.Equal(t, tgtBool, tgtSqlNullBool.Bool)
+
+	var tgtSqlNullBoolPtr *sql.NullBool
+	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtSqlNullBoolPtr), reflect.ValueOf(srcBool), opts)
+	assert.NoError(t, err)
+	assert.Equal(t, tgtBool, tgtSqlNullBoolPtr.Bool)
+
+	var tgtSqlNullInt64 sql.NullInt64
+	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtSqlNullInt64), reflect.ValueOf(srcBool), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 1, tgtSqlNullInt64.Int64)
+
+	var tgtSqlNullString sql.NullString
+	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtSqlNullString), reflect.ValueOf(srcBool), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, "true", tgtSqlNullString.String)
+
+	var tgtWrappersPBBool wrapperspb.BoolValue
+	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtWrappersPBBool), reflect.ValueOf(srcBool), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, true, tgtWrappersPBBool.Value)
+
+	var tgtWrappersPBBoolPtr *wrapperspb.BoolValue
+	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtWrappersPBBoolPtr), reflect.ValueOf(srcBool), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, true, tgtWrappersPBBoolPtr.Value)
+
+	var tgtAnypb anypb.Any
+	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAnypb), reflect.ValueOf(srcBool), opts)
+	assert.NoError(t, err)
+	m := wrapperspb.BoolValue{}
+	err = tgtAnypb.UnmarshalTo(&m)
+	assert.NoError(t, err)
+	assert.EqualValues(t, true, m.Value)
+
+	var structPBBoolValue structpb.Value_BoolValue
+	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&structPBBoolValue), reflect.ValueOf(srcBool), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, true, structPBBoolValue.BoolValue)
+
+	var structPBValue structpb.Value
+	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&structPBValue), reflect.ValueOf(srcBool), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, true, structPBValue.GetBoolValue())
+
+	var structPBNumberValue structpb.Value_NumberValue
+	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&structPBNumberValue), reflect.ValueOf(srcBool), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 1, structPBNumberValue.NumberValue)
+
+	var structPBStringValue structpb.Value_StringValue
+	err = boolCloner(new(cloneContext), []string{}, reflect.ValueOf(&structPBStringValue), reflect.ValueOf(srcBool), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, "true", structPBStringValue.StringValue)
 
 }
 
 func TestIntCloner(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-	}
+	opts := new(options).apply().correct()
 
 	var err error
 
@@ -252,15 +307,67 @@ func TestIntCloner(t *testing.T) {
 	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAny), reflect.ValueOf(srcInt), opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, srcInt, tgtAny)
+
+	srcInt = math.MaxInt64
+
+	sqlNullByte := sql.NullByte{}
+	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&sqlNullByte), reflect.ValueOf(srcInt), opts)
+	var e Error
+	assert.ErrorAs(t, err, &e)
+
+	sqlNullInt64 := sql.NullInt64{}
+	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&sqlNullInt64), reflect.ValueOf(srcInt), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcInt, sqlNullInt64.Int64)
+
+	srcInt = int(time.Now().Unix())
+
+	sqlNullTime := sql.NullTime{}
+	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&sqlNullTime), reflect.ValueOf(srcInt), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcInt, sqlNullTime.Time.Unix())
+
+	var timestampPBTimestamp timestamppb.Timestamp
+	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&timestampPBTimestamp), reflect.ValueOf(srcInt), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcInt, timestampPBTimestamp.AsTime().Unix())
+
+	srcInt = int(time.Hour)
+
+	var durationPBDuration durationpb.Duration
+	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&durationPBDuration), reflect.ValueOf(srcInt), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcInt, durationPBDuration.AsDuration())
+
+	srcInt = math.MinInt64
+
+	var wrappersPBUint64 wrapperspb.UInt64Value
+	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&wrappersPBUint64), reflect.ValueOf(srcInt), opts)
+	e = Error{}
+	assert.ErrorAs(t, err, &e)
+
+	var wrappersPBBytes wrapperspb.BytesValue
+	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&wrappersPBBytes), reflect.ValueOf(srcInt), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, strconv.Itoa(srcInt), string(wrappersPBBytes.Value))
+
+	var anyPBAny anypb.Any
+	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&anyPBAny), reflect.ValueOf(srcInt), opts)
+	assert.NoError(t, err)
+	var int64pb wrapperspb.Int64Value
+	err = anyPBAny.UnmarshalTo(&int64pb)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcInt, int64pb.Value)
+
+	var structPBNumberValue structpb.Value_NumberValue
+	err = intCloner(new(cloneContext), []string{}, reflect.ValueOf(&structPBNumberValue), reflect.ValueOf(srcInt), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, float64(srcInt), structPBNumberValue.NumberValue)
+
 }
 
 func TestUIntCloner(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-	}
+	opts := new(options).apply().correct()
 
 	var err error
 
@@ -291,15 +398,63 @@ func TestUIntCloner(t *testing.T) {
 	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAny), reflect.ValueOf(srcUint), opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, srcUint, tgtAny)
+
+	var sqlNullInt32 sql.NullInt32
+	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&sqlNullInt32), reflect.ValueOf(srcUint), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcUint, sqlNullInt32.Int32)
+
+	var sqlNullFloat64 sql.NullFloat64
+	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&sqlNullFloat64), reflect.ValueOf(srcUint), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, float64(srcUint), sqlNullFloat64.Float64)
+
+	srcUint = uint(time.Now().Unix())
+
+	var sqlNullTime sql.NullTime
+	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&sqlNullTime), reflect.ValueOf(srcUint), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcUint, sqlNullTime.Time.Unix())
+
+	var timestampPBTimestamp timestamppb.Timestamp
+	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&timestampPBTimestamp), reflect.ValueOf(srcUint), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcUint, timestampPBTimestamp.AsTime().Unix())
+
+	srcUint = uint(time.Hour)
+
+	var durationPBDuration durationpb.Duration
+	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&durationPBDuration), reflect.ValueOf(srcUint), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcUint, durationPBDuration.AsDuration())
+
+	var wrappersPBDouble wrapperspb.DoubleValue
+	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&wrappersPBDouble), reflect.ValueOf(srcUint), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, float64(srcUint), wrappersPBDouble.Value)
+
+	var wrappersPBString wrapperspb.StringValue
+	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&wrappersPBString), reflect.ValueOf(srcUint), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, strconv.FormatUint(uint64(srcUint), 10), wrappersPBString.Value)
+
+	var anyPBAny anypb.Any
+	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&anyPBAny), reflect.ValueOf(srcUint), opts)
+	assert.NoError(t, err)
+	uInt64Value := wrapperspb.UInt64Value{}
+	err = anyPBAny.UnmarshalTo(&uInt64Value)
+	assert.NoError(t, err)
+	assert.EqualValues(t, srcUint, uInt64Value.Value)
+
+	var structPBValue structpb.Value
+	err = uintCloner(new(cloneContext), []string{}, reflect.ValueOf(&structPBValue), reflect.ValueOf(srcUint), opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, float64(srcUint), structPBValue.GetNumberValue())
+
 }
 
 func TestFloat32Cloner(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-	}
+	opts := new(options).apply().correct()
 
 	var err error
 
@@ -330,45 +485,35 @@ func TestFloat32Cloner(t *testing.T) {
 	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAny), reflect.ValueOf(srcFloat32), opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, srcFloat32, tgtAny)
-}
-
-func TestFloat64Cloner(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-	}
-
-	var err error
 
 	var srcFloat64 = 120.4
 
-	var tgtInt int
+	tgtInt = 0
 	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtInt), reflect.ValueOf(srcFloat64), opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, srcFloat64, tgtInt)
 
 	srcFloat64 = 300.5
-	var tgtInt8 uint8
+	tgtInt8 = 0
 	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtInt8), reflect.ValueOf(srcFloat64), opts)
-	var overflowErr Error
-	assert.ErrorAs(t, err, &overflowErr)
+	var e Error
+	assert.ErrorAs(t, err, &e)
 
-	var tgtInt16 uint16
+	tgtInt16 = 0
 	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtInt16), reflect.ValueOf(srcFloat64), opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, srcFloat64, tgtInt16)
 
-	var tgtFloat32 float32
+	tgtFloat32 = 0
 	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtFloat32), reflect.ValueOf(srcFloat64), opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, srcFloat64, tgtFloat32)
 
-	var tgtAny any
-	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAny), reflect.ValueOf(srcFloat64), opts)
+	var tgtOtherAny any
+	err = floatCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtOtherAny), reflect.ValueOf(srcFloat64), opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, srcFloat64, tgtAny)
+	assert.EqualValues(t, srcFloat64, tgtOtherAny)
+
 }
 
 func TestStringCloner(t *testing.T) {
@@ -496,7 +641,7 @@ func TestTimeCloner(t *testing.T) {
 		TargetTagKey: "",
 		DeepClone:    false,
 		NameComparer: nil,
-		UnixTime: func(t time.Time) int64 {
+		Unix: func(t time.Time) int64 {
 			return t.Unix()
 		},
 	}
@@ -919,6 +1064,14 @@ func TestDuration(t *testing.T) {
 	assert.EqualValues(t, src, tgt)
 }
 
+func TestRawBytes(t *testing.T) {
+	src := sql.RawBytes("hello prototype")
+	var tgt sql.RawBytes
+	err := Clone(&tgt, src)
+	assert.NoError(t, err)
+	assert.EqualValues(t, src, tgt)
+}
+
 //
 //type User struct {
 //	Name     string
@@ -1019,4 +1172,51 @@ func TestDuration(t *testing.T) {
 //	if employee.SuperRule != "Super "+user.Role {
 //		t.Errorf("%v: Copy to method doesn't work", testCase)
 //	}
+//}
+
+//func TestScanner(t *testing.T) {
+//	var value uint64 = math.MaxUint64
+//
+//	var f = float32(value)
+//	fmt.Println(f)
+//
+//	nullBool := sql.NullBool{}
+//	err := nullBool.Scan(value)
+//	assert.NoError(t, err)
+//	t.Log(nullBool)
+//
+//	nullByte := sql.NullByte{}
+//	err = nullByte.Scan(value)
+//	assert.NoError(t, err)
+//	t.Log(nullByte)
+//
+//	nullInt16 := sql.NullInt16{}
+//	err = nullInt16.Scan(value)
+//	assert.NoError(t, err)
+//	t.Log(nullInt16)
+//
+//	nullInt32 := sql.NullInt32{}
+//	err = nullInt32.Scan(value)
+//	assert.NoError(t, err)
+//	t.Log(nullInt32)
+//
+//	nullInt64 := sql.NullInt64{}
+//	err = nullInt64.Scan(value)
+//	assert.NoError(t, err)
+//	t.Log(nullInt64)
+//
+//	nullFloat64 := sql.NullFloat64{}
+//	err = nullFloat64.Scan(value)
+//	assert.NoError(t, err)
+//	t.Log(nullFloat64)
+//
+//	nullString := sql.NullString{}
+//	err = nullString.Scan(value)
+//	assert.NoError(t, err)
+//	t.Log(nullString)
+//
+//	nullTime := sql.NullTime{}
+//	err = nullTime.Scan(time.Unix(int64(value), 0))
+//	assert.NoError(t, err)
+//	t.Log(nullTime)
 //}
