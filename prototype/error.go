@@ -18,6 +18,7 @@ const (
 	UnsupportedType           = 7
 	FailedConvertScanner      = 8
 	FailedUnmarshalNew        = 9
+	FailedStringify           = 10
 )
 
 type Error struct {
@@ -53,6 +54,8 @@ func (e Error) Error() string {
 		return fmt.Sprintf("prototype: failed to convert scanner error, %s, target type %s", keys, e.TargetType.String())
 	case FailedUnmarshalNew:
 		return fmt.Sprintf("prototype: failed to unmarshal new error, %s, target type %s, %v", keys, e.SourceType.String(), e.err)
+	case FailedStringify:
+		return fmt.Sprintf("prototype: failed to stringify, target type %s, %v", e.SourceType.String(), e.err)
 	default:
 		return ""
 	}
@@ -78,7 +81,7 @@ func newNegativeNumberError(fks []string, tgtType reflect.Type, value string) er
 	return Error{Code: NegativeNumber, FullKeys: fks, TargetType: tgtType, Value: value}
 }
 
-func newStringParseError(fks []string, tgtType reflect.Type, value string, err error) error {
+func newParseError(fks []string, tgtType reflect.Type, value string, err error) error {
 	return Error{Code: FailedParse, FullKeys: fks, TargetType: tgtType, Value: value, err: err}
 }
 
@@ -90,10 +93,14 @@ func newUnsupportedTypeError(fks []string, tgtType reflect.Type, srcType reflect
 	return Error{Code: UnsupportedType, FullKeys: fks, TargetType: tgtType, SourceType: srcType}
 }
 
-func newFailedConvertScannerError(fks []string, tgtType reflect.Type) error {
+func newConvertScannerError(fks []string, tgtType reflect.Type) error {
 	return Error{Code: FailedConvertScanner, FullKeys: fks, TargetType: tgtType}
 }
 
 func newUnmarshalNewError(fks []string, srcType reflect.Type, err error) error {
 	return Error{Code: FailedUnmarshalNew, FullKeys: fks, SourceType: srcType, err: err}
+}
+
+func newStringifyError(srcType reflect.Type, err error) error {
+	return Error{Code: FailedStringify, SourceType: srcType, err: err}
 }

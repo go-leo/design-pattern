@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding"
 	"fmt"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -14,16 +13,6 @@ import (
 	"reflect"
 	"time"
 )
-
-// ClonerFrom 自定义克隆方法，从源克隆到自己
-type ClonerFrom interface {
-	CloneFrom(src any) error
-}
-
-// ClonerTo 自定义克隆方法，将自己克隆到目标
-type ClonerTo interface {
-	CloneTo(tgt any) error
-}
 
 var (
 	clonerFromType = reflect.TypeOf((*ClonerFrom)(nil)).Elem()
@@ -73,37 +62,21 @@ var (
 	structPBListValueType   = reflect.TypeOf(structpb.Value_ListValue{})
 )
 
-type anyPBMarshalFrom interface {
-	MarshalFrom(m proto.Message) error
-}
-
 var (
-	intKinds   = []reflect.Kind{reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64}
-	uintKinds  = []reflect.Kind{reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr}
-	floatKinds = []reflect.Kind{reflect.Float32, reflect.Float64}
+	intKinds       = []reflect.Kind{reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64}
+	uintKinds      = []reflect.Kind{reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr}
+	floatKinds     = []reflect.Kind{reflect.Float32, reflect.Float64}
+	stringKinds    = []reflect.Kind{reflect.String}
+	boolKinds      = []reflect.Kind{reflect.Bool}
+	allSampleKinds []reflect.Kind
 )
 
-func indirectValue(v reflect.Value) (ClonerFrom, reflect.Value) {
-	for {
-		if v.Type().NumMethod() > 0 && v.CanInterface() {
-			if c, ok := v.Interface().(ClonerFrom); ok {
-				return c, v
-			}
-		}
-		if v.Kind() == reflect.Pointer && !v.IsNil() {
-			v = v.Elem()
-		} else {
-			break
-		}
-	}
-	return nil, v
-}
-
-func indirectType(t reflect.Type) reflect.Type {
-	for t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	return t
+func init() {
+	allSampleKinds = append(allSampleKinds, intKinds...)
+	allSampleKinds = append(allSampleKinds, uintKinds...)
+	allSampleKinds = append(allSampleKinds, floatKinds...)
+	allSampleKinds = append(allSampleKinds, stringKinds...)
+	allSampleKinds = append(allSampleKinds, boolKinds...)
 }
 
 var boolIntMap = map[bool]int{

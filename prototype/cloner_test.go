@@ -2,6 +2,8 @@ package prototype
 
 import (
 	"database/sql"
+	"github.com/go-leo/gox/errorx"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -846,12 +848,7 @@ func TestStructCloner(t *testing.T) {
 }
 
 func TestMapCloner(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-	}
+	opts := new(options).apply().correct()
 
 	var err error
 	var tgtVal reflect.Value
@@ -870,20 +867,31 @@ func TestMapCloner(t *testing.T) {
 				"Msg":    "error msg",
 			},
 		},
+		"info": map[any]any{
+			10:     "10",
+			false:  "FALSE",
+			"TRUE": true,
+			23.4:   []int{2, 3, 4},
+		},
 	}
 	var tgtMap map[string]any
 	tgtVal = reflect.ValueOf(&tgtMap)
 	srcVal = reflect.ValueOf(srcMap)
 	err = mapCloner(new(cloneContext), []string{}, tgtVal, srcVal, opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, tgtMap, srcMap)
+	marshal, err := jsoniter.Marshal(srcMap)
+	expected := string(errorx.Ignore(marshal, err))
+	bytes, err := jsoniter.Marshal(tgtMap)
+	actual := string(errorx.Ignore(bytes, err))
+	assert.JSONEq(t, expected, actual)
 
 	var tgtAny any
 	tgtVal = reflect.ValueOf(&tgtAny)
 	srcVal = reflect.ValueOf(srcMap)
 	err = mapCloner(new(cloneContext), []string{}, tgtVal, srcVal, opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, tgtMap, srcMap)
+	actual = string(errorx.Ignore(jsoniter.Marshal(tgtAny)))
+	assert.JSONEq(t, expected, actual)
 
 	type Error struct {
 		Course string
