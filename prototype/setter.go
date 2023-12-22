@@ -2,9 +2,11 @@ package prototype
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	"math"
 	"reflect"
@@ -104,7 +106,7 @@ func setBoolStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal r
 	switch tgtType {
 	case sqlNullBoolType:
 		return setScanner(e, fks, tgtVal, srcVal, opts, b)
-	case sqlNullByteType, sqlNullInt16Type, sqlNullInt32Type, sqlNullInt64Type, sqlNullFloat64Type:
+	case sqlNullInt16Type, sqlNullInt32Type, sqlNullInt64Type, sqlNullByteType, sqlNullFloat64Type:
 		return setScanner(e, fks, tgtVal, srcVal, opts, boolIntMap[b])
 	case sqlNullStringType:
 		return setScanner(e, fks, tgtVal, srcVal, opts, strconv.FormatBool(b))
@@ -131,6 +133,7 @@ func setBoolStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal r
 		return nil
 	case anyPBAnyType:
 		return setAnyProtoBuf(e, fks, tgtVal, srcVal, opts, &wrapperspb.BoolValue{Value: b})
+
 	case structPBBoolValueType:
 		tgtVal.FieldByName("BoolValue").SetBool(b)
 		return nil
@@ -171,15 +174,15 @@ func setIntStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal re
 		return setScanner(e, fks, tgtVal, srcVal, opts, i)
 	case sqlNullFloat64Type:
 		return setScanner(e, fks, tgtVal, srcVal, opts, i)
-	case sqlNullStringType:
-		return setScanner(e, fks, tgtVal, srcVal, opts, strconv.FormatInt(i, 10))
 	case sqlNullBoolType:
 		return setScanner(e, fks, tgtVal, srcVal, opts, i != 0)
+	case sqlNullStringType:
+		return setScanner(e, fks, tgtVal, srcVal, opts, strconv.FormatInt(i, 10))
 	case sqlNullTimeType:
-		return setScanner(e, fks, tgtVal, srcVal, opts, opts.Time(i))
+		return setScanner(e, fks, tgtVal, srcVal, opts, opts.IntToTime(i))
 
 	case timestampPBTimestampType:
-		t := opts.Time(i)
+		t := opts.IntToTime(i)
 		tgtVal.FieldByName("Seconds").SetInt(t.Unix())
 		tgtVal.FieldByName("Nanos").SetInt(int64(t.Nanosecond()))
 		return nil
@@ -233,6 +236,7 @@ func setIntStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal re
 		return nil
 	case anyPBAnyType:
 		return setAnyProtoBuf(e, fks, tgtVal, srcVal, opts, &wrapperspb.Int64Value{Value: i})
+
 	case structPBNumberValueType:
 		tgtVal.FieldByName("NumberValue").SetFloat(float64(i))
 		return nil
@@ -276,15 +280,15 @@ func setUintStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal r
 		return setScanner(e, fks, tgtVal, srcVal, opts, u)
 	case sqlNullFloat64Type:
 		return setScanner(e, fks, tgtVal, srcVal, opts, u)
-	case sqlNullStringType:
-		return setScanner(e, fks, tgtVal, srcVal, opts, strconv.FormatUint(u, 10))
 	case sqlNullBoolType:
 		return setScanner(e, fks, tgtVal, srcVal, opts, u != 0)
+	case sqlNullStringType:
+		return setScanner(e, fks, tgtVal, srcVal, opts, strconv.FormatUint(u, 10))
 	case sqlNullTimeType:
-		return setScanner(e, fks, tgtVal, srcVal, opts, opts.Time(int64(u)))
+		return setScanner(e, fks, tgtVal, srcVal, opts, opts.IntToTime(int64(u)))
 
 	case timestampPBTimestampType:
-		t := opts.Time(int64(u))
+		t := opts.IntToTime(int64(u))
 		tgtVal.FieldByName("Seconds").SetInt(t.Unix())
 		tgtVal.FieldByName("Nanos").SetInt(int64(t.Nanosecond()))
 		return nil
@@ -335,6 +339,7 @@ func setUintStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal r
 		return nil
 	case anyPBAnyType:
 		return setAnyProtoBuf(e, fks, tgtVal, srcVal, opts, &wrapperspb.UInt64Value{Value: u})
+
 	case structPBNumberValueType:
 		tgtVal.FieldByName("NumberValue").SetFloat(float64(u))
 		return nil
@@ -387,10 +392,10 @@ func setFloatStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal 
 	case sqlNullBoolType:
 		return setScanner(e, fks, tgtVal, srcVal, opts, f != 0)
 	case sqlNullTimeType:
-		return setScanner(e, fks, tgtVal, srcVal, opts, opts.Time(int64(f)))
+		return setScanner(e, fks, tgtVal, srcVal, opts, opts.IntToTime(int64(f)))
 
 	case timestampPBTimestampType:
-		t := opts.Time(int64(f))
+		t := opts.IntToTime(int64(f))
 		tgtVal.FieldByName("Seconds").SetInt(t.Unix())
 		tgtVal.FieldByName("Nanos").SetInt(int64(t.Nanosecond()))
 		return nil
@@ -456,6 +461,7 @@ func setFloatStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal 
 		return nil
 	case anyPBAnyType:
 		return setAnyProtoBuf(e, fks, tgtVal, srcVal, opts, &wrapperspb.DoubleValue{Value: f})
+
 	case structPBNumberValueType:
 		tgtVal.FieldByName("NumberValue").SetFloat(f)
 		return nil
@@ -474,17 +480,308 @@ func setFloatStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal 
 	}
 }
 
-func setStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, v any) error {
-	switch v := v.(type) {
-	case float64:
-	case string:
-	case []byte:
-	case time.Time:
-		if tgtVal.Type() == timeType {
-			tgtVal.Set(reflect.ValueOf(v))
-			return nil
+func setStringStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, s string) error {
+	tgtType := tgtVal.Type()
+	switch tgtType {
+	case sqlNullStringType:
+		return setScanner(e, fks, tgtVal, srcVal, opts, s)
+	case sqlNullInt16Type:
+		i, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
 		}
+		if i > math.MaxInt16 {
+			return newOverflowError(fks, tgtType, s)
+		}
+		return setScanner(e, fks, tgtVal, srcVal, opts, i)
+	case sqlNullInt32Type:
+		i, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		if i > math.MaxInt32 {
+			return newOverflowError(fks, tgtType, s)
+		}
+		return setScanner(e, fks, tgtVal, srcVal, opts, i)
+	case sqlNullInt64Type:
+		i, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		if i > math.MaxInt64 {
+			return newOverflowError(fks, tgtType, s)
+		}
+		return setScanner(e, fks, tgtVal, srcVal, opts, i)
+	case sqlNullByteType:
+		u, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		if u > math.MaxUint8 {
+			return newOverflowError(fks, tgtType, s)
+		}
+		if u < 0 {
+			return newNegativeNumberError(fks, tgtType, s)
+		}
+		return setScanner(e, fks, tgtVal, srcVal, opts, u)
+	case sqlNullFloat64Type:
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		return setScanner(e, fks, tgtVal, srcVal, opts, f)
+	case sqlNullBoolType:
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		return setScanner(e, fks, tgtVal, srcVal, opts, b)
+	case sqlNullTimeType:
+		return setScanner(e, fks, tgtVal, srcVal, opts, opts.StringToTime(s))
+
+	case timestampPBTimestampType:
+		t := opts.StringToTime(s)
+		tgtVal.FieldByName("Seconds").SetInt(t.Unix())
+		tgtVal.FieldByName("Nanos").SetInt(int64(t.Nanosecond()))
+		return nil
+	case durationPBDurationType:
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		nanos := d.Nanoseconds()
+		secs := nanos / 1e9
+		nanos -= secs * 1e9
+		tgtVal.FieldByName("Seconds").SetInt(secs)
+		tgtVal.FieldByName("Nanos").SetInt(nanos)
+		return nil
+
+	case wrappersPBStringType:
+		tgtVal.FieldByName("Value").SetString(s)
+		return nil
+	case wrappersPBBytesType:
+		tgtVal.FieldByName("Value").SetBytes([]byte(s))
+		return nil
+	case wrappersPBInt32Type:
+		i, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		if i > math.MaxInt32 {
+			return newOverflowError(fks, tgtType, s)
+		}
+		tgtVal.FieldByName("Value").SetInt(i)
+		return nil
+	case wrappersPBInt64Type:
+		i, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		if i > math.MaxInt64 {
+			return newOverflowError(fks, tgtType, s)
+		}
+		tgtVal.FieldByName("Value").SetInt(i)
+		return nil
+	case wrappersPBUint32Type:
+		u, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		if u > math.MaxUint32 {
+			return newOverflowError(fks, tgtType, s)
+		}
+		tgtVal.FieldByName("Value").SetUint(u)
+		return nil
+	case wrappersPBUint64Type:
+		u, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		tgtVal.FieldByName("Value").SetUint(u)
+		return nil
+	case wrappersPBFloatType:
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		if f > math.MaxFloat32 {
+			return newOverflowError(fks, tgtType, s)
+		}
+		tgtVal.FieldByName("Value").SetFloat(f)
+		return nil
+	case wrappersPBDoubleType:
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		tgtVal.FieldByName("Value").SetFloat(f)
+		return nil
+	case wrappersPBBoolType:
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		tgtVal.FieldByName("Value").SetBool(b)
+		return nil
+
+	case emptyPBEmptyType:
+		return nil
+	case anyPBAnyType:
+		return setAnyProtoBuf(e, fks, tgtVal, srcVal, opts, &wrapperspb.StringValue{Value: s})
+
+	case structPBStringValueType:
+		tgtVal.FieldByName("StringValue").SetString(s)
+		return nil
+	case structPBNumberValueType:
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		tgtVal.FieldByName("NumberValue").SetFloat(f)
+		return nil
+	case structPBBoolValueType:
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return newStringParseError(fks, tgtType, s, err)
+		}
+		tgtVal.FieldByName("BoolValue").SetBool(b)
+		return nil
+	case structPBValueType:
+		value, _ := structpb.NewValue(s)
+		tgtVal.Set(reflect.ValueOf(value).Elem())
+		return nil
+
+	default:
 		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
-	return nil
+}
+
+func setBytesStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, bs []byte) error {
+	tgtType := tgtVal.Type()
+	switch tgtType {
+	case wrappersPBBytesType:
+		tgtVal.FieldByName("Value").SetBytes(bs)
+		return nil
+	case wrappersPBStringType:
+		tgtVal.FieldByName("Value").SetString(base64.StdEncoding.EncodeToString(bs))
+		return nil
+	case anyPBAnyType:
+		return setAnyProtoBuf(e, fks, tgtVal, srcVal, opts, &wrapperspb.BytesValue{Value: bs})
+	case structPBStringValueType:
+		tgtVal.FieldByName("StringValue").SetString(base64.StdEncoding.EncodeToString(bs))
+		return nil
+	case structPBValueType:
+		value, _ := structpb.NewValue(bs)
+		tgtVal.Set(reflect.ValueOf(value).Elem())
+		return nil
+	default:
+		return setStringStruct(e, fks, tgtVal, srcVal, opts, string(bs))
+	}
+}
+
+func setTimeStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, t time.Time) error {
+	tgtType := tgtVal.Type()
+	switch tgtType {
+	case sqlNullTimeType:
+		return setScanner(e, fks, tgtVal, srcVal, opts, t)
+
+	case sqlNullStringType:
+		return setScanner(e, fks, tgtVal, srcVal, opts, opts.TimeToString(t))
+	case sqlNullInt16Type:
+		i := opts.TimeToInt(t)
+		if i > math.MaxInt16 {
+			return newOverflowError(fks, tgtType, t.String())
+		}
+		return setScanner(e, fks, tgtVal, srcVal, opts, i)
+	case sqlNullInt32Type:
+		i := opts.TimeToInt(t)
+		if i > math.MaxInt32 {
+			return newOverflowError(fks, tgtType, t.String())
+		}
+		return setScanner(e, fks, tgtVal, srcVal, opts, i)
+	case sqlNullInt64Type:
+		i := opts.TimeToInt(t)
+		if i > math.MaxInt64 {
+			return newOverflowError(fks, tgtType, t.String())
+		}
+		return setScanner(e, fks, tgtVal, srcVal, opts, i)
+	case sqlNullByteType:
+		i := opts.TimeToInt(t)
+		if i > math.MaxUint8 {
+			return newOverflowError(fks, tgtType, t.String())
+		}
+		if i < 0 {
+			return newNegativeNumberError(fks, tgtType, t.String())
+		}
+		return setScanner(e, fks, tgtVal, srcVal, opts, i)
+	case sqlNullFloat64Type:
+		i := opts.TimeToInt(t)
+		return setScanner(e, fks, tgtVal, srcVal, opts, i)
+
+	case timestampPBTimestampType:
+		tgtVal.FieldByName("Seconds").SetInt(t.Unix())
+		tgtVal.FieldByName("Nanos").SetInt(int64(t.Nanosecond()))
+		return nil
+
+	case wrappersPBStringType:
+		tgtVal.FieldByName("Value").SetString(opts.TimeToString(t))
+		return nil
+	case wrappersPBBytesType:
+		tgtVal.FieldByName("Value").SetBytes([]byte(opts.TimeToString(t)))
+		return nil
+	case wrappersPBInt32Type:
+		i := opts.TimeToInt(t)
+		if i > math.MaxInt32 {
+			return newOverflowError(fks, tgtType, t.String())
+		}
+		tgtVal.FieldByName("Value").SetInt(i)
+		return nil
+	case wrappersPBInt64Type:
+		i := opts.TimeToInt(t)
+		if i > math.MaxInt64 {
+			return newOverflowError(fks, tgtType, t.String())
+		}
+		tgtVal.FieldByName("Value").SetInt(i)
+		return nil
+	case wrappersPBUint32Type:
+		i := opts.TimeToInt(t)
+		if i > math.MaxUint32 {
+			return newOverflowError(fks, tgtType, t.String())
+		}
+		if i < 0 {
+			return newNegativeNumberError(fks, tgtType, t.String())
+		}
+		tgtVal.FieldByName("Value").SetUint(uint64(i))
+		return nil
+	case wrappersPBUint64Type:
+		i := opts.TimeToInt(t)
+		if i < 0 {
+			return newNegativeNumberError(fks, tgtType, t.String())
+		}
+		tgtVal.FieldByName("Value").SetUint(uint64(i))
+		return nil
+	case wrappersPBFloatType, wrappersPBDoubleType:
+		i := opts.TimeToInt(t)
+		tgtVal.FieldByName("Value").SetFloat(float64(i))
+		return nil
+
+	case emptyPBEmptyType:
+		return nil
+	case anyPBAnyType:
+		return setAnyProtoBuf(e, fks, tgtVal, srcVal, opts, timestamppb.New(t))
+
+	case structPBStringValueType:
+		tgtVal.FieldByName("StringValue").SetString(opts.TimeToString(t))
+		return nil
+	case structPBNumberValueType:
+		i := opts.TimeToInt(t)
+		tgtVal.FieldByName("NumberValue").SetFloat(float64(i))
+		return nil
+	case structPBValueType:
+		value, _ := structpb.NewValue(opts.TimeToString(t))
+		tgtVal.Set(reflect.ValueOf(value).Elem())
+		return nil
+	default:
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
+	}
 }

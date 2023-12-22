@@ -37,14 +37,17 @@ var (
 
 	timeType = reflect.TypeOf(time.Time{})
 
-	sqlNullBoolType    = reflect.TypeOf(sql.NullBool{})
-	sqlNullByteType    = reflect.TypeOf(sql.NullByte{})
 	sqlNullInt16Type   = reflect.TypeOf(sql.NullInt16{})
 	sqlNullInt32Type   = reflect.TypeOf(sql.NullInt32{})
 	sqlNullInt64Type   = reflect.TypeOf(sql.NullInt64{})
+	sqlNullByteType    = reflect.TypeOf(sql.NullByte{})
 	sqlNullFloat64Type = reflect.TypeOf(sql.NullFloat64{})
+	sqlNullBoolType    = reflect.TypeOf(sql.NullBool{})
 	sqlNullStringType  = reflect.TypeOf(sql.NullString{})
 	sqlNullTimeType    = reflect.TypeOf(sql.NullTime{})
+
+	timestampPBTimestampType = reflect.TypeOf(timestamppb.Timestamp{})
+	durationPBDurationType   = reflect.TypeOf(durationpb.Duration{})
 
 	wrappersPBBoolType   = reflect.TypeOf(wrapperspb.BoolValue{})
 	wrappersPBInt32Type  = reflect.TypeOf(wrapperspb.Int32Value{})
@@ -56,11 +59,8 @@ var (
 	wrappersPBStringType = reflect.TypeOf(wrapperspb.StringValue{})
 	wrappersPBBytesType  = reflect.TypeOf(wrapperspb.BytesValue{})
 
-	timestampPBTimestampType = reflect.TypeOf(timestamppb.Timestamp{})
-	durationPBDurationType   = reflect.TypeOf(durationpb.Duration{})
-
-	anyPBAnyType     = reflect.TypeOf(anypb.Any{})
 	emptyPBEmptyType = reflect.TypeOf(emptypb.Empty{})
+	anyPBAnyType     = reflect.TypeOf(anypb.Any{})
 
 	structPBStructType      = reflect.TypeOf(structpb.Struct{})
 	structPBListType        = reflect.TypeOf(structpb.ListValue{})

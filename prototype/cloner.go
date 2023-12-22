@@ -2,10 +2,12 @@ package prototype
 
 import (
 	"encoding"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"github.com/go-leo/gox/mathx"
 	"golang.org/x/exp/slices"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -350,7 +352,7 @@ func stringCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, stringCloner)
 	case reflect.Struct:
-		return setStruct(e, fks, tv, srcVal, opts, s)
+		return setStringStruct(e, fks, tv, srcVal, opts, s)
 	default:
 		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -360,7 +362,7 @@ func stringCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 bytesCloner 克隆[]byte类型
 []byte ----> ClonerFrom
 []byte ----> []byte
-[]byte ----> string
+[]byte ----> string(base64)
 []byte ----> any([]byte)
 string ----> bool(strconv.ParseBool)
 string ----> int(strconv.ParseInt)
@@ -386,7 +388,7 @@ func bytesCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 		}
 		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.String:
-		tv.SetString(string(bs))
+		tv.SetString(base64.StdEncoding.EncodeToString(bs))
 		return nil
 	case reflect.Interface:
 		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, bs)
@@ -422,7 +424,7 @@ func bytesCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, stringCloner)
 	case reflect.Struct:
-		return setStruct(e, fks, tv, srcVal, opts, bs)
+		return setBytesStruct(e, fks, tv, srcVal, opts, bs)
 	default:
 		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -458,15 +460,15 @@ func pointerCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, 
 
 /*
 timeCloner 克隆time.Time类型
-time.Time ----> ClonerFrom
-time.Time ----> struct(time.Time)
-time.Time ----> any(time.Time)
-time.Time ----> string(time.RFC3339)
-time.Time ----> []byte(time.RFC3339)
-time.Time ----> int(time.Unix)
-time.Time ----> uint(time.Unix)
-time.Time ----> float(time.Unix)
-time.Time ----> pointer
+time.IntToTime ----> ClonerFrom
+time.IntToTime ----> struct(time.IntToTime)
+time.IntToTime ----> any(time.IntToTime)
+time.IntToTime ----> string(time.RFC3339)
+time.IntToTime ----> []byte(time.RFC3339)
+time.IntToTime ----> int(time.Unix)
+time.IntToTime ----> uint(time.Unix)
+time.IntToTime ----> float(time.Unix)
+time.IntToTime ----> pointer
 */
 func timeCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
@@ -479,7 +481,7 @@ func timeCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 	}
 	switch tv.Kind() {
 	case reflect.Struct:
-		return setStruct(e, fks, tv, srcVal, opts, t)
+		return setTimeStruct(e, fks, tv, srcVal, opts, t)
 	case reflect.Interface:
 		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, t)
 	case reflect.String:
@@ -492,11 +494,11 @@ func timeCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 		}
 		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return setInt(fks, tv, opts.Unix(t))
+		return setInt(fks, tv, opts.TimeToInt(t))
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return setUint(fks, tv, uint64(opts.Unix(t)))
+		return setUint(fks, tv, uint64(opts.TimeToInt(t)))
 	case reflect.Float32, reflect.Float64:
-		return setFloat(fks, tv, float64(opts.Unix(t)))
+		return setFloat(fks, tv, float64(opts.TimeToInt(t)))
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, timeCloner)
 	default:
@@ -631,7 +633,14 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 	case sqlNullStringType:
 		return stringCloner(e, fks, tgtVal, srcVal.FieldByName("String"), opts)
 	case sqlNullTimeType:
-		return timeCloner(e, fks, tgtVal, srcVal.FieldByName("Time"), opts)
+		return timeCloner(e, fks, tgtVal, srcVal.FieldByName("IntToTime"), opts)
+
+	case timestampPBTimestampType:
+		timestamp, _ := srcVal.Interface().(timestamppb.Timestamp)
+		return timeCloner(e, fks, tgtVal, reflect.ValueOf(timestamp.AsTime()), opts)
+	case durationPBDurationType:
+		duration, _ := srcVal.Interface().(durationpb.Duration)
+		return intCloner(e, fks, tgtVal, reflect.ValueOf(duration.AsDuration()), opts)
 
 	case wrappersPBBoolType:
 		return boolCloner(e, fks, tgtVal, srcVal.FieldByName("Value"), opts)
@@ -646,16 +655,16 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 	case wrappersPBBytesType:
 		return bytesCloner(e, fks, tgtVal, srcVal.FieldByName("Value"), opts)
 
-	case timestampPBTimestampType:
-		timestamp, _ := srcVal.Interface().(timestamppb.Timestamp)
-		return timeCloner(e, fks, tgtVal, reflect.ValueOf(timestamp.AsTime()), opts)
-	case durationPBDurationType:
-		duration, _ := srcVal.Interface().(durationpb.Duration)
-		return intCloner(e, fks, tgtVal, reflect.ValueOf(duration.AsDuration()), opts)
-
 	case anyPBAnyType:
-		// TODO anypb
-		return nil
+		if srcVal.CanAddr() {
+			srcPtr := srcVal.Addr().Interface().(*anypb.Any)
+			message, err := srcPtr.UnmarshalNew()
+			if err != nil {
+				return newUnmarshalNewError(fks, srcVal.Type(), err)
+			}
+			return interfaceCloner(e, fks, tgtVal, reflect.ValueOf(message), opts)
+		}
+		return bytesCloner(e, fks, tgtVal, srcVal.FieldByName("Value"), opts)
 	case emptyPBEmptyType:
 		return nil
 

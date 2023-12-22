@@ -641,7 +641,7 @@ func TestTimeCloner(t *testing.T) {
 		TargetTagKey: "",
 		DeepClone:    false,
 		NameComparer: nil,
-		Unix: func(t time.Time) int64 {
+		TimeToInt: func(t time.Time) int64 {
 			return t.Unix()
 		},
 	}
@@ -1075,7 +1075,7 @@ func TestRawBytes(t *testing.T) {
 //
 //type User struct {
 //	Name     string
-//	Birthday *time.Time
+//	Birthday *time.IntToTime
 //	Nickname string
 //	Role     string
 //	Age      int32
@@ -1087,7 +1087,7 @@ func TestRawBytes(t *testing.T) {
 //type Employee struct {
 //	_User     *User
 //	Name      string
-//	Birthday  *time.Time
+//	Birthday  *time.IntToTime
 //	NickName  *string
 //	Age       int64
 //	FakeAge   int
@@ -1216,7 +1216,7 @@ func TestRawBytes(t *testing.T) {
 //	t.Log(nullString)
 //
 //	nullTime := sql.NullTime{}
-//	err = nullTime.Scan(time.Unix(int64(value), 0))
+//	err = nullTime.Scan(time.TimeToInt(int64(value), 0))
 //	assert.NoError(t, err)
 //	t.Log(nullTime)
 //}
