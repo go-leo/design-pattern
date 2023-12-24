@@ -2,6 +2,7 @@ package prototype
 
 import (
 	"fmt"
+	"golang.org/x/exp/slices"
 	"reflect"
 	"sort"
 	"strings"
@@ -19,7 +20,7 @@ type field struct {
 	fullName   string
 }
 
-type structFields struct {
+type jstructFields struct {
 	// dominants 是一个字段列表，存储了结构体的主要字段信息
 	dominants []field
 	// dominantsNameIndex 是一个映射，用于通过字段名称查找字段在 dominants 中的索引
@@ -53,21 +54,138 @@ func (x byIndex) Less(i, j int) bool {
 var fieldCache sync.Map // map[reflect.Type]structFields
 
 // cachedTypeFields is like typeFields but uses a cache to avoid repeated work.
-func cachedTypeFields(t reflect.Type, opts *options, tagKey string) structFields {
+func cachedTypeFields(t reflect.Type, opts *options, tagKey string) jstructFields {
 	key := t.String() + ":" + tagKey
 	if f, ok := fieldCache.Load(key); ok {
-		return f.(structFields)
+		return f.(jstructFields)
 	}
 	fields := typeFields(t, opts, tagKey)
+
 	f, _ := fieldCache.LoadOrStore(key, fields)
-	return f.(structFields)
+	return f.(jstructFields)
+}
+
+type structFieldInfo struct {
+	reflect.StructField
+	ClonerFunc clonerFunc
+	SourceTag  *structFieldTagInfo
+	TargetTag  *structFieldTagInfo
+	Indexes    []int
+	Names      []string
+}
+
+type structInfo struct {
+	structFieldInfo
+	StructFields     []*structFieldInfo
+	AnonymousStructs []*structInfo
+}
+
+// cachedTypeFields is like typeFields but uses a cache to avoid repeated work.
+func cachedStruct(t reflect.Type, opts *options) *structInfo {
+	if f, ok := fieldCache.Load(t); ok {
+		return f.(*structInfo)
+	}
+	str := &structInfo{
+		structFieldInfo: structFieldInfo{StructField: reflect.StructField{Type: t}},
+	}
+	str.analysisStruct(new(structInfo), opts)
+	f, _ := fieldCache.LoadOrStore(t, str)
+	return f.(*structInfo)
+}
+
+func (str *structInfo) analysisStruct(parent *structInfo, opts *options) {
+	str.analysisField(parent, opts)
+	for i := 0; i < str.StructField.Type.NumField(); i++ {
+		structField := str.StructField.Type.Field(i)
+		// structField 非匿名字段
+		if !structField.Anonymous {
+			// 忽略非匿名未导出字段
+			if !structField.IsExported() {
+				continue
+			}
+
+			// 分析structField
+			structFieldInfo := &structFieldInfo{
+				StructField: structField,
+			}
+			structFieldInfo.analysisField(str, opts)
+			str.StructFields = append(str.StructFields, structFieldInfo)
+			continue
+		}
+		// structField 匿名字段
+		// 对于匿名字段，检查fieldType是否为指针类型，如果是，则将fieldType设置为指针所指向的类型。
+		if structField.Type.Kind() == reflect.Pointer {
+			structField.Type = structField.Type.Elem()
+		}
+		// 如果fieldType是结构体，放入AnonymousStructs列表中，递归解析
+		if structField.Type.Kind() == reflect.Struct {
+			anonymousStruct := &structInfo{
+				structFieldInfo: structFieldInfo{StructField: structField},
+			}
+			anonymousStruct.analysisStruct(str, opts)
+			str.AnonymousStructs = append(str.AnonymousStructs, anonymousStruct)
+			continue
+		}
+		// 如果structField不是导出字段，则忽略
+		if !structField.IsExported() {
+			continue
+		}
+		// 分析structField
+		info := &structFieldInfo{
+			StructField: structField,
+		}
+		info.analysisField(str, opts)
+		str.StructFields = append(str.StructFields, info)
+	}
+}
+
+type structFieldTagInfo struct {
+	Name     string
+	Options  []string
+	IsIgnore bool
+}
+
+func (sf *structFieldInfo) analysisField(parent *structInfo, opts *options) {
+	// 5. 接下来，它会获取字段的标签，并解析标签中的名称和选项。
+	sf.ClonerFunc = typeCloner(sf.Type, true, opts)
+	sf.SourceTag = sf.analysisTag(opts.SourceTagKey)
+	sf.TargetTag = sf.analysisTag(opts.TargetTagKey)
+	sf.Indexes = append(slices.Clone(parent.Indexes), sf.StructField.Index...)
+	sf.Names = append(slices.Clone(parent.Names), sf.Name)
+	return
+}
+
+func (sf *structFieldInfo) analysisTag(Key string) *structFieldTagInfo {
+	value, ok := sf.Tag.Lookup(Key)
+	// 没找到tag，或者value为空，正常返回
+	if !ok || len(value) <= 0 {
+		return &structFieldTagInfo{
+			Name:     "",
+			Options:  []string{},
+			IsIgnore: false,
+		}
+	}
+	// 如果是tag是"-",则忽略该字段
+	if value == "-" {
+		return &structFieldTagInfo{
+			Name:     "",
+			Options:  []string{},
+			IsIgnore: true,
+		}
+	}
+	values := strings.Split(value, ",")
+	return &structFieldTagInfo{
+		Name:     values[0],
+		Options:  values[1:],
+		IsIgnore: false,
+	}
 }
 
 // typeFields 函数返回给定类型应该被识别的字段列表。
 // 该算法是对要包含的结构体集合进行广度优先搜索 - 首先是顶级结构体，然后是任何可达的匿名结构体。
 // 简单来说，typeFields 函数用于获取应该处理的字段列表。
 // 它使用广度优先搜索算法遍历结构体类型，包括顶级结构体和可达的匿名结构体，并返回这些结构体中应该被处理的字段列表。
-func typeFields(t reflect.Type, opts *options, tagKey string) structFields {
+func typeFields(t reflect.Type, opts *options, tagKey string) jstructFields {
 	// current 和 next 两个用于存储当前和下一级的匿名字段的切片
 	current := make([]field, 0)
 	next := []field{{typ: t}}
@@ -194,7 +312,7 @@ func typeFields(t reflect.Type, opts *options, tagKey string) structFields {
 	dominants, recessives := divideFields(fields)
 	dominants, dominantsNameIndex := dominantsNameIndex(t, opts, dominants)
 	recessives, recessivesNameIndex, recessivesFullnameIndex := recessivesNameIndex(t, opts, recessives)
-	return structFields{
+	return jstructFields{
 		dominants:               dominants,
 		dominantsNameIndex:      dominantsNameIndex,
 		recessives:              recessives,
@@ -270,7 +388,7 @@ func dominantsNameIndex(t reflect.Type, opts *options, fields []field) ([]field,
 	return fields, nameIndex
 }
 
-func findDominantField(tgtFields structFields, opts *options, tagName string) (field, bool) {
+func findDominantField(tgtFields jstructFields, opts *options, tagName string) (field, bool) {
 	return findField(tgtFields.dominantsNameIndex, tgtFields.dominants, opts, tagName)
 }
 
@@ -290,7 +408,7 @@ func findField(nameIndex map[string]int, fields []field, opts *options, tagName 
 	return field{}, false
 }
 
-func findRecessiveField(tgtFields structFields, opts *options, tagKey string) ([]field, bool) {
+func findRecessiveField(tgtFields jstructFields, opts *options, tagKey string) ([]field, bool) {
 	// 查找tgt字段
 	if tgtIdxs, ok := tgtFields.recessivesNameIndex[tagKey]; ok {
 		// 找到了一个完全匹配的字段名称
@@ -348,14 +466,15 @@ func findSettableValue(val reflect.Value, f field) (reflect.Value, error) {
 	return outVal, nil
 }
 
-func tagName(sf reflect.StructField, tagKey string) (string, bool) {
-	tag := sf.Tag.Get(tagKey)
+func tagName(sf reflect.StructField, Key string) (string, bool) {
+	tagVal := sf.Tag.Get(Key)
 	// 如果是标签是"-",则忽略该字段
-	if tag == "-" {
+	if tagVal == "-" {
 		return "", false
 	}
+	tag, opt, _ := strings.Cut(tagVal, ",")
 	// 获取字段的标签，并解析标签中的名称和选项。
-	name, opts := parseTag(tag)
+	name, opts := tag, tagOptions(opt)
 	if !isValidTag(name) {
 		// 如果名称无效，则将名称设置为空。
 		name = ""
@@ -400,4 +519,26 @@ func isValidTag(s string) bool {
 		}
 	}
 	return true
+}
+
+// tagOptions is the string following a comma in a struct field's "json"
+// tag, or the empty string. It does not include the leading comma.
+type tagOptions string
+
+// Contains reports whether a comma-separated dominants of options
+// contains a particular substr flag. substr must be surrounded by a
+// string boundary or commas.
+func (o tagOptions) Contains(optionName string) bool {
+	if len(o) == 0 {
+		return false
+	}
+	s := string(o)
+	for s != "" {
+		var name string
+		name, s, _ = strings.Cut(s, ",")
+		if name == optionName {
+			return true
+		}
+	}
+	return false
 }

@@ -44,3 +44,15 @@ func (o *options) correct() *options {
 }
 
 type Option func(o *options)
+
+func SourceTagKey(key string) Option {
+	return func(o *options) {
+		o.SourceTagKey = key
+	}
+}
+
+func TargetTagKey(key string) Option {
+	return func(o *options) {
+		o.TargetTagKey = key
+	}
+}

@@ -759,7 +759,7 @@ func struct2StructCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.V
 	return nil
 }
 
-func struct2StructDominantFieldCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, tgtType, srcType reflect.Type, tgtFields, srcFields structFields, opts *options) error {
+func struct2StructDominantFieldCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, tgtType, srcType reflect.Type, tgtFields, srcFields jstructFields, opts *options) error {
 	// 复制字段, 循环src字段
 	for srcName, srcIdx := range srcFields.dominantsNameIndex {
 		srcDominantField := srcFields.dominants[srcIdx]
@@ -790,7 +790,7 @@ func struct2StructDominantFieldCloner(e *cloneContext, fks []string, tgtVal, src
 	return nil
 }
 
-func struct2StructRecessivesFieldCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, tgtType, srcType reflect.Type, tgtFields, srcFields structFields, opts *options) error {
+func struct2StructRecessivesFieldCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, tgtType, srcType reflect.Type, tgtFields, srcFields jstructFields, opts *options) error {
 	// 复制字段, 循环src字段
 	for srcKey, srcIdxs := range srcFields.recessivesNameIndex {
 		srcRecessiveFieldValMap := make(map[string]reflect.Value)

@@ -1228,3 +1228,38 @@ func TestRawBytes(t *testing.T) {
 //	assert.NoError(t, err)
 //	t.Log(nullTime)
 //}
+
+type A struct {
+	B
+	C
+	ID   int    `prototype:"id,omitempty"`
+	Name string `prototype:"-"`
+}
+
+type B struct {
+	ID   int    `prototype:"id,omitempty"`
+	Name string `prototype:"name,omitempty"`
+}
+
+type C struct {
+	ID   int    `prototype:"id,omitempty"`
+	Name string `prototype:"name,omitempty"`
+}
+
+func TestA(t *testing.T) {
+	a := A{
+		B: B{
+			ID:   2,
+			Name: "B",
+		},
+		C: C{
+			ID:   3,
+			Name: "C",
+		},
+		ID: 1,
+	}
+	t.Log(a.ID)
+	opts := new(options).apply(SourceTagKey("prototype"), TargetTagKey("prototype")).correct()
+	info := cachedStruct(reflect.TypeOf(a), opts)
+	t.Log(info)
+}
