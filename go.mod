@@ -5,6 +5,8 @@ go 1.20
 require (
 	github.com/go-leo/gox v0.0.0-20231221120635-7f7d03735c2c
 	github.com/json-iterator/go v1.1.12
+	github.com/kinbiko/jsonassert v1.1.1
+	github.com/smartystreets/goconvey v1.8.1
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/exp v0.0.0-20230213192124-5e25df0256eb
 	golang.org/x/tools v0.13.0
@@ -15,9 +17,12 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/gopherjs/gopherjs v1.17.2 // indirect
+	github.com/jtolds/gls v4.20.0+incompatible // indirect
 	github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421 // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/smarty/assertions v1.15.0 // indirect
 	golang.org/x/mod v0.12.0 // indirect
 	golang.org/x/net v0.16.0 // indirect
 	golang.org/x/sys v0.13.0 // indirect

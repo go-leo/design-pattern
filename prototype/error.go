@@ -9,16 +9,17 @@ import (
 type Code int
 
 const (
-	NonPointer           Code = 1
-	Nil                       = 2
-	Overflow                  = 3
-	NegativeNumber            = 4
-	FailedParse               = 5
-	PointerCycle              = 6
-	UnsupportedType           = 7
-	FailedConvertScanner      = 8
-	FailedUnmarshalNew        = 9
-	FailedStringify           = 10
+	NonPointer               Code = 1
+	Nil                           = 2
+	Overflow                      = 3
+	NegativeNumber                = 4
+	FailedParse                   = 5
+	PointerCycle                  = 6
+	UnsupportedType               = 7
+	FailedConvertScanner          = 8
+	FailedUnmarshalNew            = 9
+	FailedStringify               = 10
+	FailedSetEmbeddedPointer      = 11
 )
 
 type Error struct {
@@ -56,6 +57,8 @@ func (e Error) Error() string {
 		return fmt.Sprintf("prototype: failed to unmarshal new error, %s, target type %s, %v", keys, e.SourceType.String(), e.err)
 	case FailedStringify:
 		return fmt.Sprintf("prototype: failed to stringify, target type %s, %v", e.SourceType.String(), e.err)
+	case FailedSetEmbeddedPointer:
+		return fmt.Sprintf("prototype: failed to set embedded pointer, %s, to unexported struct: %v", keys, e.TargetType.String())
 	default:
 		return ""
 	}
@@ -103,4 +106,8 @@ func newUnmarshalNewError(fks []string, srcType reflect.Type, err error) error {
 
 func newStringifyError(srcType reflect.Type, err error) error {
 	return Error{Code: FailedStringify, SourceType: srcType, err: err}
+}
+
+func newSetEmbeddedPointerError(fks []string, tgtType reflect.Type) error {
+	return Error{Code: FailedSetEmbeddedPointer, FullKeys: fks, TargetType: tgtType}
 }

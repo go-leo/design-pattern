@@ -14,6 +14,7 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -173,6 +174,46 @@ func TestClonerTo(t *testing.T) {
 	cloner = valueCloner(srcClonerToStructVal, opts)
 	var tgtClonerToStruct testClonerToStruct
 	err = cloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtClonerToStruct), srcClonerToStructVal, opts)
+
+}
+
+type testTextUnmarshaler struct {
+	ID   int    `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
+}
+
+func (tu *testTextUnmarshaler) UnmarshalText(text []byte) error {
+	split := strings.Split(string(text), ",")
+	tu.ID, _ = strconv.Atoi(split[0])
+	tu.Name = split[1]
+	return nil
+}
+
+func TestTextUnmarshaler(t *testing.T) {
+	opts := new(options).apply().correct()
+
+	expected := testTextUnmarshaler{
+		ID:   7,
+		Name: "prototype",
+	}
+
+	var err error
+
+	srcJsonStr := "7,prototype"
+	srcJsonVal := reflect.ValueOf(&srcJsonStr)
+	cloner := valueCloner(srcJsonVal, opts)
+	var tgtTextUnmarshaler *testTextUnmarshaler
+	err = cloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtTextUnmarshaler), srcJsonVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, expected, *tgtTextUnmarshaler)
+
+	srcJsonBytes := []byte("7,prototype")
+	srcJsonBytesVal := reflect.ValueOf(&srcJsonBytes)
+	cloner = valueCloner(srcJsonBytesVal, opts)
+	var tgtTextUnmarshalerByte *testTextUnmarshaler
+	err = cloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtTextUnmarshalerByte), srcJsonBytesVal, opts)
+	assert.NoError(t, err)
+	assert.EqualValues(t, expected, *tgtTextUnmarshalerByte)
 
 }
 
@@ -555,6 +596,7 @@ func TestStringCloner(t *testing.T) {
 	err = stringCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtStrPtr), reflect.ValueOf(srcString), opts)
 	assert.NoError(t, err)
 	assert.EqualValues(t, tgtFloat64, 3.1415836)
+
 }
 
 func TestBytesCloner(t *testing.T) {
@@ -827,7 +869,7 @@ func TestMapCloner(t *testing.T) {
 				"Msg":    "error msg",
 			},
 		},
-		"info": map[any]any{
+		"Info": map[any]any{
 			10:     "10",
 			false:  "FALSE",
 			"TRUE": true,
@@ -839,10 +881,8 @@ func TestMapCloner(t *testing.T) {
 	srcVal = reflect.ValueOf(srcMap)
 	err = mapCloner(new(cloneContext), []string{}, tgtVal, srcVal, opts)
 	assert.NoError(t, err)
-	marshal, err := jsoniter.Marshal(srcMap)
-	expected := string(errorx.Ignore(marshal, err))
-	bytes, err := jsoniter.Marshal(tgtMap)
-	actual := string(errorx.Ignore(bytes, err))
+	expected := string(errorx.Ignore(jsoniter.Marshal(srcMap)))
+	actual := string(errorx.Ignore(jsoniter.Marshal(tgtMap)))
 	assert.JSONEq(t, expected, actual)
 
 	var tgtAny any
@@ -850,6 +890,7 @@ func TestMapCloner(t *testing.T) {
 	srcVal = reflect.ValueOf(srcMap)
 	err = mapCloner(new(cloneContext), []string{}, tgtVal, srcVal, opts)
 	assert.NoError(t, err)
+	expected = string(errorx.Ignore(jsoniter.Marshal(srcMap)))
 	actual = string(errorx.Ignore(jsoniter.Marshal(tgtAny)))
 	assert.JSONEq(t, expected, actual)
 
@@ -872,44 +913,25 @@ func TestMapCloner(t *testing.T) {
 		Msg      string
 		Username string
 		IsPass   bool
+		Info     map[any]any
 	}
 	var tgtStruct Response
 	tgtVal = reflect.ValueOf(&tgtStruct)
 	srcVal = reflect.ValueOf(srcMap)
 	err = mapCloner(new(cloneContext), []string{}, tgtVal, srcVal, opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, tgtStruct, Response{
-		Code: Code{
-			Error: &Error{
-				Course: "Course",
-				Msg:    "error msg",
-			},
-			Msg:  "ok",
-			Code: 200,
-		},
-		Msg:      "success",
-		Username: "Forest",
-		IsPass:   false,
-	})
+	expected = string(errorx.Ignore(jsoniter.Marshal(srcMap)))
+	actual = string(errorx.Ignore(jsoniter.Marshal(tgtStruct)))
+	assert.JSONEq(t, expected, actual)
 
 	var tgtStructPointer *Response
 	tgtVal = reflect.ValueOf(&tgtStructPointer)
 	srcVal = reflect.ValueOf(srcMap)
 	err = mapCloner(new(cloneContext), []string{}, tgtVal, srcVal, opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, *tgtStructPointer, Response{
-		Code: Code{
-			Error: &Error{
-				Course: "Course",
-				Msg:    "error msg",
-			},
-			Msg:  "ok",
-			Code: 200,
-		},
-		Msg:      "success",
-		Username: "Forest",
-		IsPass:   false,
-	})
+	expected = string(errorx.Ignore(jsoniter.Marshal(srcMap)))
+	actual = string(errorx.Ignore(jsoniter.Marshal(tgtStructPointer)))
+	assert.JSONEq(t, expected, actual)
 }
 
 func TestSliceCloner(t *testing.T) {

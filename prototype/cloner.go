@@ -4,16 +4,13 @@ import (
 	"encoding"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"reflect"
-	"sort"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -311,6 +308,13 @@ func stringCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 	if cloner != nil {
 		return cloner.CloneFrom(s)
 	}
+
+	if reflect.PointerTo(tv.Type()).Implements(textUnmarshalerType) && tv.CanAddr() {
+		if unmarshaler, ok := tv.Addr().Interface().(encoding.TextUnmarshaler); ok {
+			return unmarshaler.UnmarshalText([]byte(s))
+		}
+	}
+
 	switch tv.Kind() {
 	case reflect.String:
 		tv.SetString(s)
@@ -379,6 +383,13 @@ func bytesCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 	if cloner != nil {
 		return cloner.CloneFrom(bs)
 	}
+
+	if reflect.PointerTo(tv.Type()).Implements(textUnmarshalerType) && tv.CanAddr() {
+		if unmarshaler, ok := tv.Addr().Interface().(encoding.TextUnmarshaler); ok {
+			return unmarshaler.UnmarshalText(bs)
+		}
+	}
+
 	switch tv.Kind() {
 	case reflect.Slice:
 		if tv.Type().Elem().Kind() == reflect.Uint8 {
@@ -421,7 +432,7 @@ func bytesCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 		}
 		return setFloat(fks, tv, f)
 	case reflect.Pointer:
-		return setPointer(e, fks, tgtVal, srcVal, opts, tv, stringCloner)
+		return setPointer(e, fks, tgtVal, srcVal, opts, tv, bytesCloner)
 	case reflect.Struct:
 		return setBytesToStruct(e, fks, tv, srcVal, opts, bs)
 	default:
@@ -596,21 +607,6 @@ func _mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 	}
 }
 
-func kvPairs(srcVal reflect.Value) ([]kvPair, error) {
-	// Extract and sort the keys.
-	kayValPairs := make([]kvPair, srcVal.Len())
-	mapIter := srcVal.MapRange()
-	for i := 0; mapIter.Next(); i++ {
-		kayValPairs[i].kVal = mapIter.Key()
-		kayValPairs[i].vVal = mapIter.Value()
-		if err := kayValPairs[i].resolve(); err != nil {
-			return nil, fmt.Errorf("prototype: map resolve error for type %q: %q", srcVal.Type().String(), err.Error())
-		}
-	}
-	sort.Slice(kayValPairs, func(i, j int) bool { return strings.Compare(kayValPairs[i].keyStr, kayValPairs[j].keyStr) < 0 })
-	return kayValPairs, nil
-}
-
 /*
 structCloner 克隆 struct 类型
 sql.NullBool ----> boolCloner
@@ -718,25 +714,14 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 		if cloner != nil {
 			return cloner.CloneFrom(srcVal.Interface())
 		}
+
 		switch tv.Kind() {
 		case reflect.Struct:
-			return struct2StructCloner(e, fks, tv, srcVal, opts)
+			return setStructToStruct(e, fks, tv, srcVal, opts, tv)
 		case reflect.Interface:
-			if tv.NumMethod() == 0 {
-				return struct2AnyCloner(e, fks, tv, srcVal, opts)
-			}
-			return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
+			return setStructToAny(e, fks, tgtVal, srcVal, opts, tv)
 		case reflect.Map:
-			tgtType := tv.Type()
-			tgtKeyType := tgtType.Key()
-			if slices.Contains(allSampleKinds, tgtKeyType.Kind()) ||
-				reflect.PointerTo(tgtKeyType).Implements(textUnmarshalerType) {
-				if tv.IsNil() {
-					tv.Set(reflect.MakeMap(tgtType))
-				}
-				return struct2MapCloner(e, fks, tv, srcVal, opts)
-			}
-			return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
+			return setStructToMap(e, fks, tgtVal, srcVal, opts, tv)
 		case reflect.Pointer:
 			return setPointer(e, fks, tgtVal, srcVal, opts, tv, structCloner)
 		default:
@@ -747,22 +732,23 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 
 func struct2StructCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	tgtType := tgtVal.Type()
-	tgtFields := cachedTypeFields(tgtType, opts, opts.TagKey)
+	fields := cachedTypeFields(tgtType, opts)
 	srcType := srcVal.Type()
-	srcFields := cachedTypeFields(srcType, opts, opts.TagKey)
-	if err := struct2StructDominantFieldCloner(e, fks, tgtVal, srcVal, tgtType, srcType, tgtFields, srcFields, opts); err != nil {
+	if err := struct2StructDominantFieldCloner(e, fks, tgtVal, srcVal, tgtType, srcType, fields, opts); err != nil {
 		return err
 	}
-	if err := struct2StructRecessivesFieldCloner(e, fks, tgtVal, srcVal, tgtType, srcType, tgtFields, srcFields, opts); err != nil {
+	if err := struct2StructRecessivesFieldCloner(e, fks, tgtVal, srcVal, tgtType, srcType, fields, opts); err != nil {
 		return err
 	}
 	return nil
 }
 
-func struct2StructDominantFieldCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, tgtType, srcType reflect.Type, tgtFields, srcFields jstructFields, opts *options) error {
+func struct2StructDominantFieldCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, tgtType, srcType reflect.Type, fields jstructFields, opts *options) error {
 	// 复制字段, 循环src字段
-	for srcName, srcIdx := range srcFields.dominantsNameIndex {
-		srcDominantField := srcFields.dominants[srcIdx]
+	for srcName, srcIdx := range fields.dominantsNameIndex {
+		subFKS := append(slices.Clone(fks), srcName)
+
+		srcDominantField := fields.dominants[srcIdx]
 		// 查找src字段值
 		srcDominantFieldVal, ok := findValue(srcVal, srcDominantField)
 		if !ok {
@@ -770,32 +756,34 @@ func struct2StructDominantFieldCloner(e *cloneContext, fks []string, tgtVal, src
 		}
 
 		// 查找 tgt 主要字段
-		tgtDominantField, ok := findDominantField(tgtFields, opts, srcName)
+		tgtDominantField, ok := findDominantField(fields, opts, srcName)
 		if !ok {
 			// 没有找到目标，则跳过
 			continue
 		}
 
 		// 查找tgt字段值
-		tgtDominantFieldVal, err := findSettableValue(tgtVal, tgtDominantField)
-		if err != nil {
-			return err
+		tgtDominantFieldVal, ok := findSettableValue(tgtVal, tgtDominantField)
+		if !ok {
+			return newSetEmbeddedPointerError(subFKS, tgtDominantFieldVal.Type().Elem())
 		}
 
 		// 克隆src字段到tgt字段
-		if err := srcDominantField.clonerFunc(e, append(slices.Clone(fks), srcName), tgtDominantFieldVal, srcDominantFieldVal, opts); err != nil {
+		if err := srcDominantField.clonerFunc(e, subFKS, tgtDominantFieldVal, srcDominantFieldVal, opts); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func struct2StructRecessivesFieldCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, tgtType, srcType reflect.Type, tgtFields, srcFields jstructFields, opts *options) error {
+func struct2StructRecessivesFieldCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, tgtType, srcType reflect.Type, fields jstructFields, opts *options) error {
 	// 复制字段, 循环src字段
-	for srcKey, srcIdxs := range srcFields.recessivesNameIndex {
+	for srcKey, srcIdxs := range fields.recessivesNameIndex {
+		subFKS := append(slices.Clone(fks), srcKey)
+
 		srcRecessiveFieldValMap := make(map[string]reflect.Value)
 		for _, srcIdx := range srcIdxs {
-			srcRecessiveField := srcFields.recessives[srcIdx]
+			srcRecessiveField := fields.recessives[srcIdx]
 			// 查找src字段值
 			srcRecessiveFieldVal, ok := findValue(srcVal, srcRecessiveField)
 			if !ok {
@@ -807,7 +795,7 @@ func struct2StructRecessivesFieldCloner(e *cloneContext, fks []string, tgtVal, s
 			continue
 		}
 
-		tgtRecessiveFields, ok := findRecessiveField(tgtFields, opts, srcKey)
+		tgtRecessiveFields, ok := findRecessiveField(fields, opts, srcKey)
 		if !ok {
 			continue
 		}
@@ -818,10 +806,11 @@ func struct2StructRecessivesFieldCloner(e *cloneContext, fks []string, tgtVal, s
 		tgtRecessiveFieldValMap := make(map[string]reflect.Value)
 		for _, recessiveField := range tgtRecessiveFields {
 			// 查找tgt字段值
-			tgtFieldVal, err := findSettableValue(tgtVal, recessiveField)
-			if err != nil {
-				return err
+			tgtFieldVal, ok := findSettableValue(tgtVal, recessiveField)
+			if !ok {
+				return newSetEmbeddedPointerError(subFKS, tgtFieldVal.Type().Elem())
 			}
+
 			tgtRecessiveFieldValMap[recessiveField.fullName] = tgtFieldVal
 		}
 
@@ -832,8 +821,8 @@ func struct2StructRecessivesFieldCloner(e *cloneContext, fks []string, tgtVal, s
 			}
 
 			// 克隆src字段到tgt字段
-			srcRecessiveField := srcFields.recessives[srcFields.recessivesFullNameIndex[fullName]]
-			if err := srcRecessiveField.clonerFunc(e, append(slices.Clone(fks), srcKey), tgtRecessiveFieldVal, srcRecessiveFieldVal, opts); err != nil {
+			srcRecessiveField := fields.recessives[fields.recessivesFullNameIndex[fullName]]
+			if err := srcRecessiveField.clonerFunc(e, subFKS, tgtRecessiveFieldVal, srcRecessiveFieldVal, opts); err != nil {
 				return err
 			}
 		}
@@ -844,7 +833,7 @@ func struct2StructRecessivesFieldCloner(e *cloneContext, fks []string, tgtVal, s
 func struct2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	m := make(map[string]any)
 	srcType := srcVal.Type()
-	srcFields := cachedTypeFields(srcType, opts, opts.TagKey)
+	srcFields := cachedTypeFields(srcType, opts)
 	for _, selfField := range srcFields.selfFields {
 		// 查找src字段值
 		srcDominantFieldVal, ok := findValue(srcVal, selfField)
@@ -888,7 +877,7 @@ func struct2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 
 func struct2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	srcType := srcVal.Type()
-	srcFields := cachedTypeFields(srcType, opts, opts.TagKey)
+	srcFields := cachedTypeFields(srcType, opts)
 	tgtType := tgtVal.Type()
 
 	// 复制字段, 循环src字段
@@ -971,49 +960,6 @@ func struct2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 		tgtVal.SetMapIndex(kVal, vVal)
 	}
 	return nil
-}
-
-type kvPair struct {
-	kVal   reflect.Value
-	vVal   reflect.Value
-	keyStr string
-}
-
-func (p *kvPair) resolve() error {
-	if tm, ok := p.kVal.Interface().(encoding.TextMarshaler); ok {
-		if p.kVal.Kind() == reflect.Pointer && p.kVal.IsNil() {
-			return nil
-		}
-		buf, err := tm.MarshalText()
-		p.keyStr = string(buf)
-		return err
-	}
-	if str, ok := p.kVal.Interface().(fmt.Stringer); ok {
-		if p.kVal.Kind() == reflect.Pointer && p.kVal.IsNil() {
-			return nil
-		}
-		p.keyStr = str.String()
-		return nil
-	}
-	switch p.kVal.Kind() {
-	case reflect.String:
-		p.keyStr = p.kVal.String()
-		return nil
-	case reflect.Bool:
-		p.keyStr = strconv.FormatBool(p.kVal.Bool())
-		return nil
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		p.keyStr = strconv.FormatInt(p.kVal.Int(), 10)
-		return nil
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		p.keyStr = strconv.FormatUint(p.kVal.Uint(), 10)
-		return nil
-	case reflect.Float32, reflect.Float64:
-		p.keyStr = strconv.FormatFloat(p.kVal.Float(), 'f', -1, 64)
-		return nil
-	default:
-		return errors.New("unexpected map key type")
-	}
 }
 
 func unsupportedTypeCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {

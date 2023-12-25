@@ -1,7 +1,7 @@
 package prototype
 
 import (
-	"fmt"
+	"golang.org/x/exp/slices"
 	"reflect"
 	"sort"
 	"strings"
@@ -10,7 +10,7 @@ import (
 )
 
 // A field represents a single field found in a struct.
-type field struct {
+type jfield struct {
 	name       string
 	tag        bool
 	index      []int
@@ -21,18 +21,18 @@ type field struct {
 
 type jstructFields struct {
 	// dominants 是一个字段列表，存储了结构体的主要字段信息
-	dominants []field
+	dominants []jfield
 	// dominantsNameIndex 是一个映射，用于通过字段名称查找字段在 dominants 中的索引
 	dominantsNameIndex      map[string]int
-	recessives              []field
+	recessives              []jfield
 	recessivesNameIndex     map[string][]int
 	recessivesFullNameIndex map[string]int
-	selfFields              []field
+	selfFields              []jfield
 	selfNameIndex           map[string]int
 }
 
 // byIndex sorts field by index sequence.
-type byIndex []field
+type byIndex []jfield
 
 func (x byIndex) Len() int { return len(x) }
 
@@ -53,14 +53,13 @@ func (x byIndex) Less(i, j int) bool {
 var fieldCache sync.Map // map[reflect.Type]structFields
 
 // cachedTypeFields is like typeFields but uses a cache to avoid repeated work.
-func cachedTypeFields(t reflect.Type, opts *options, tagKey string) jstructFields {
-	key := t.String() + ":" + tagKey
-	if f, ok := fieldCache.Load(key); ok {
+func cachedTypeFields(t reflect.Type, opts *options) jstructFields {
+	if f, ok := fieldCache.Load(t); ok {
 		return f.(jstructFields)
 	}
 	fields := typeFields(t, opts)
 
-	f, _ := fieldCache.LoadOrStore(key, fields)
+	f, _ := fieldCache.LoadOrStore(t, fields)
 	return f.(jstructFields)
 }
 
@@ -70,8 +69,8 @@ func cachedTypeFields(t reflect.Type, opts *options, tagKey string) jstructField
 // 它使用广度优先搜索算法遍历结构体类型，包括顶级结构体和可达的匿名结构体，并返回这些结构体中应该被处理的字段列表。
 func typeFields(t reflect.Type, opts *options) jstructFields {
 	// current 和 next 两个用于存储当前和下一级的匿名字段的切片
-	current := make([]field, 0)
-	next := []field{{typ: t}}
+	current := make([]jfield, 0)
+	next := []jfield{{typ: t}}
 
 	// currentCount 和 nextCount 用于记录字段名称出现的次数
 	var currentCount, nextCount map[reflect.Type]int
@@ -80,9 +79,9 @@ func typeFields(t reflect.Type, opts *options) jstructFields {
 	visited := map[reflect.Type]bool{}
 
 	// fields 用于存储找到的字段
-	var fields []field
+	var fields []jfield
 
-	var selfFields []field
+	var selfFields []jfield
 
 	// len(next) > 0，表示还有下一级的匿名字段需要探索
 	for len(next) > 0 {
@@ -142,7 +141,7 @@ func typeFields(t reflect.Type, opts *options) jstructFields {
 				if name == "" {
 					name = sf.Name
 				}
-				currField := field{
+				currField := jfield{
 					name:       name,
 					tag:        tagged,
 					index:      index,
@@ -206,7 +205,7 @@ func typeFields(t reflect.Type, opts *options) jstructFields {
 	}
 }
 
-func selfNameIndex(t reflect.Type, opts *options, fields []field) ([]field, map[string]int) {
+func selfNameIndex(t reflect.Type, opts *options, fields []jfield) ([]jfield, map[string]int) {
 	// 对字段进行排序，按照索引顺序排序。
 	sort.Sort(byIndex(fields))
 	// 创建一个映射 nameIndex，用于通过字段名称查找字段在 fields 中的索引。
@@ -218,9 +217,9 @@ func selfNameIndex(t reflect.Type, opts *options, fields []field) ([]field, map[
 }
 
 // divideFields 分出主要字段和次要字段
-func divideFields(fields []field) ([]field, []field) {
-	dominants := make([]field, 0, len(fields))
-	recessives := make([]field, 0)
+func divideFields(fields []jfield) ([]jfield, []jfield) {
+	dominants := make([]jfield, 0, len(fields))
+	recessives := make([]jfield, 0)
 	for advance, i := 0, 0; i < len(fields); i += advance {
 		// 进行循环，每次循环处理一个字段名称。 在循环内部，查找具有相同名称的字段序列。
 		fi := fields[i]
@@ -247,7 +246,7 @@ func divideFields(fields []field) ([]field, []field) {
 	return dominants, recessives
 }
 
-func recessivesNameIndex(t reflect.Type, opts *options, fields []field) ([]field, map[string][]int, map[string]int) {
+func recessivesNameIndex(t reflect.Type, opts *options, fields []jfield) ([]jfield, map[string][]int, map[string]int) {
 	// 对字段进行排序，按照索引顺序排序。
 	sort.Sort(byIndex(fields))
 	// 创建一个映射 nameIndex，用于通过字段名称查找字段在 fields 中的索引。
@@ -260,7 +259,7 @@ func recessivesNameIndex(t reflect.Type, opts *options, fields []field) ([]field
 	return fields, nameIndex, fullNameIndex
 }
 
-func dominantsNameIndex(t reflect.Type, opts *options, fields []field) ([]field, map[string]int) {
+func dominantsNameIndex(t reflect.Type, opts *options, fields []jfield) ([]jfield, map[string]int) {
 	// 对字段进行排序，按照索引顺序排序。
 	sort.Sort(byIndex(fields))
 	// 创建一个映射 nameIndex，用于通过字段名称查找字段在 fields 中的索引。
@@ -271,11 +270,11 @@ func dominantsNameIndex(t reflect.Type, opts *options, fields []field) ([]field,
 	return fields, nameIndex
 }
 
-func findDominantField(tgtFields jstructFields, opts *options, tagName string) (field, bool) {
+func findDominantField(tgtFields jstructFields, opts *options, tagName string) (jfield, bool) {
 	return findField(tgtFields.dominantsNameIndex, tgtFields.dominants, opts, tagName)
 }
 
-func findField(nameIndex map[string]int, fields []field, opts *options, tagName string) (field, bool) {
+func findField(nameIndex map[string]int, fields []jfield, opts *options, tagName string) (jfield, bool) {
 	// 查找tgt字段
 	if tgtIdx, ok := nameIndex[tagName]; ok {
 		// 找到了一个完全匹配的字段名称
@@ -288,14 +287,14 @@ func findField(nameIndex map[string]int, fields []field, opts *options, tagName 
 			}
 		}
 	}
-	return field{}, false
+	return jfield{}, false
 }
 
-func findRecessiveField(tgtFields jstructFields, opts *options, tagKey string) ([]field, bool) {
+func findRecessiveField(tgtFields jstructFields, opts *options, tagKey string) ([]jfield, bool) {
 	// 查找tgt字段
 	if tgtIdxs, ok := tgtFields.recessivesNameIndex[tagKey]; ok {
 		// 找到了一个完全匹配的字段名称
-		fields := make([]field, 0, len(tgtIdxs))
+		fields := make([]jfield, 0, len(tgtIdxs))
 		for _, tgtIdx := range tgtIdxs {
 			fields = append(fields, tgtFields.recessives[tgtIdx])
 		}
@@ -304,7 +303,7 @@ func findRecessiveField(tgtFields jstructFields, opts *options, tagKey string) (
 		// 代码回退到了一种更为耗时的线性搜索方法，该方法在进行字段名称匹配时不考虑大小写
 		for tgtKey, tgtIdxs := range tgtFields.recessivesNameIndex {
 			if opts.NameComparer(tgtKey, tagKey) {
-				fields := make([]field, 0, len(tgtIdxs))
+				fields := make([]jfield, 0, len(tgtIdxs))
 				for _, tgtIdx := range tgtIdxs {
 					fields = append(fields, tgtFields.recessives[tgtIdx])
 				}
@@ -318,7 +317,7 @@ func findRecessiveField(tgtFields jstructFields, opts *options, tagKey string) (
 	return nil, false
 }
 
-func findValue(val reflect.Value, f field) (reflect.Value, bool) {
+func findValue(val reflect.Value, f jfield) (reflect.Value, bool) {
 	outVal := val
 	for _, i := range f.index {
 		if outVal.Kind() == reflect.Pointer {
@@ -332,21 +331,21 @@ func findValue(val reflect.Value, f field) (reflect.Value, bool) {
 	return outVal, true
 }
 
-func findSettableValue(val reflect.Value, f field) (reflect.Value, error) {
-	outVal := val
+func findSettableValue(val reflect.Value, f jfield) (reflect.Value, bool) {
+	resVal := val
 	for _, i := range f.index {
-		if outVal.Kind() == reflect.Pointer {
-			if outVal.IsNil() {
-				if !outVal.CanSet() {
-					return reflect.Value{}, fmt.Errorf("prototype: cannot set embedded pointer to unexported struct: %v", outVal.Type().Elem())
+		if resVal.Kind() == reflect.Pointer {
+			if resVal.IsNil() {
+				if !resVal.CanSet() {
+					return resVal, false
 				}
-				outVal.Set(reflect.New(outVal.Type().Elem()))
+				resVal.Set(reflect.New(resVal.Type().Elem()))
 			}
-			outVal = outVal.Elem()
+			resVal = resVal.Elem()
 		}
-		outVal = outVal.Field(i)
+		resVal = resVal.Field(i)
 	}
-	return outVal, nil
+	return resVal, true
 }
 
 func tagName(sf reflect.StructField, Key string) (string, bool) {
@@ -367,7 +366,7 @@ func tagName(sf reflect.StructField, Key string) (string, bool) {
 	return name, true
 }
 
-func fullName(f field, name string, sf reflect.StructField) string {
+func fullName(f jfield, name string, sf reflect.StructField) string {
 	var fullName string
 	if len(f.fullName) > 0 {
 		fullName = strings.Join([]string{f.fullName, name}, ".")
@@ -424,4 +423,192 @@ func (o tagOptions) Contains(optionName string) bool {
 		}
 	}
 	return false
+}
+
+type structInfo struct {
+	Type reflect.Type
+	// 字段
+	Fields []*fieldInfo
+	// label ---> 字段
+	Indexes map[string]*fieldInfo
+	// 方法
+	Methods []*methodInfo
+
+	// 匿名字段
+	AnonymousFields []*fieldInfo
+}
+
+func (str *structInfo) analysisStruct(opts *options) {
+	// 字段解析
+	for i := 0; i < str.Type.NumField(); i++ {
+		structField := str.Type.Field(i)
+		// structField 非匿名字段
+		if !structField.Anonymous {
+			// 忽略非匿名未导出字段
+			if !structField.IsExported() {
+				continue
+			}
+			// 分析structField
+			field := &fieldInfo{StructField: structField}
+			field.analysisField(opts)
+			str.Fields = append(str.Fields, field)
+			continue
+		}
+		// structField 匿名字段
+		// 对于匿名字段，检查fieldType是否为指针类型，如果是，则将fieldType设置为指针所指向的类型。
+		fieldType := structField.Type
+		if fieldType.Kind() == reflect.Pointer {
+			fieldType = fieldType.Elem()
+		}
+		// 如果fieldType是结构体，放入AnonymousStructs列表中，等待递归解析
+		if fieldType.Kind() == reflect.Struct {
+			field := fieldInfo{StructField: structField}
+			field.analysisField(opts)
+			str.Fields = append(str.Fields, &field)
+			str.AnonymousFields = append(str.AnonymousFields, &field)
+			continue
+		}
+		// 如果structField不是导出字段，则忽略
+		if !structField.IsExported() {
+			continue
+		}
+		// 分析structField
+		field := &fieldInfo{StructField: structField}
+		field.analysisField(opts)
+		str.Fields = append(str.Fields, field)
+	}
+
+	// 生成name -> field映射
+	for _, fieldInfo := range str.Fields {
+		if !fieldInfo.IsIgnore {
+			str.Indexes[fieldInfo.Label] = fieldInfo
+		}
+	}
+
+	// 方法解析
+	for i := 0; i < str.Type.NumMethod(); i++ {
+		method := str.Type.Method(i)
+		// 忽略未导出方法
+		if !method.IsExported() {
+			continue
+		}
+		str.Methods = append(str.Methods, &methodInfo{Method: method})
+	}
+}
+
+func (str *structInfo) findField(key string, opts *options) (*fieldInfo, bool) {
+	// 完全匹配
+	f, ok := str.Indexes[key]
+	if ok {
+		return f, true
+	}
+	// 模糊匹配
+	for name, f := range str.Indexes {
+		if opts.NameComparer(name, key) {
+			return f, true
+		}
+	}
+	return nil, false
+}
+
+func (str *structInfo) rangeFields(f func(label string, field *fieldInfo) error) error {
+	for label, field := range str.Indexes {
+		if err := f(label, field); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type fieldInfo struct {
+	reflect.StructField
+	Indexes    []int
+	ClonerFunc clonerFunc
+	WithTag    bool
+	Label      string
+	Options    []string
+	IsIgnore   bool
+}
+
+func (sf *fieldInfo) analysisField(opts *options) {
+	sf.ClonerFunc = typeCloner(sf.Type, true, opts)
+	sf.Indexes = slices.Clone(sf.StructField.Index)
+	tagValue := sf.Tag.Get(opts.TagKey)
+	// 如果是tag是"-",则忽略该字段
+	if tagValue == "-" {
+		sf.WithTag = false
+		sf.Label = ""
+		sf.Options = []string{}
+		sf.IsIgnore = true
+		return
+	}
+	// 没找到tag，或者value为空，默认的字段名
+	if len(tagValue) <= 0 {
+		sf.WithTag = false
+		sf.Label = sf.StructField.Name
+		sf.Options = []string{}
+		sf.IsIgnore = false
+		return
+	}
+	// 以","分割value，
+	values := strings.Split(tagValue, ",")
+	sf.WithTag = true
+	sf.Label = values[0]
+	sf.Options = values[1:]
+	sf.IsIgnore = false
+}
+
+func (sf *fieldInfo) findGettableValue(val reflect.Value) (reflect.Value, bool) {
+	outVal := val
+	for _, i := range sf.Indexes {
+		if outVal.Kind() == reflect.Pointer {
+			if outVal.IsNil() {
+				return reflect.Value{}, false
+			}
+			outVal = outVal.Elem()
+		}
+		outVal = outVal.Field(i)
+	}
+	return outVal, true
+}
+
+func (sf *fieldInfo) findSettableValue(val reflect.Value) (reflect.Value, bool) {
+	outVal := val
+	for _, i := range sf.Indexes {
+		if outVal.Kind() == reflect.Pointer {
+			if outVal.IsNil() {
+				if !outVal.CanSet() {
+					return outVal, false
+				}
+				outVal.Set(reflect.New(outVal.Type().Elem()))
+			}
+			outVal = outVal.Elem()
+		}
+		outVal = outVal.Field(i)
+	}
+	return outVal, true
+}
+
+type methodInfo struct {
+	reflect.Method
+}
+
+func newStructInfo(t reflect.Type) *structInfo {
+	return &structInfo{
+		Type:            t,
+		Fields:          make([]*fieldInfo, 0),
+		AnonymousFields: make([]*fieldInfo, 0),
+		Indexes:         make(map[string]*fieldInfo),
+		Methods:         make([]*methodInfo, 0),
+	}
+}
+
+func cachedStruct(t reflect.Type, opts *options) *structInfo {
+	if f, ok := fieldCache.Load(t); ok {
+		return f.(*structInfo)
+	}
+	str := newStructInfo(t)
+	str.analysisStruct(opts)
+	f, _ := fieldCache.LoadOrStore(t, str)
+	return f.(*structInfo)
 }
