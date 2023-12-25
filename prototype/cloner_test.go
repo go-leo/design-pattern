@@ -2,6 +2,7 @@ package prototype
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"github.com/go-leo/gox/errorx"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
@@ -38,12 +39,7 @@ func (s *testClonerFromString) CloneFrom(src any) error {
 }
 
 func TestClonerFrom(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-	}
+	opts := new(options).apply().correct()
 
 	var err error
 	var tgtClonerFrom testClonerFromString
@@ -127,12 +123,7 @@ type testClonerToStruct struct {
 }
 
 func TestClonerTo(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-	}
+	opts := new(options).apply().correct()
 
 	var err error
 	var srcClonerTo testClonerToString
@@ -186,12 +177,7 @@ func TestClonerTo(t *testing.T) {
 }
 
 func TestBoolCloner(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-	}
+	opts := new(options).apply().correct()
 
 	var err error
 
@@ -519,12 +505,7 @@ func TestFloat32Cloner(t *testing.T) {
 }
 
 func TestStringCloner(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-	}
+	opts := new(options).apply().correct()
 
 	var err error
 
@@ -577,12 +558,7 @@ func TestStringCloner(t *testing.T) {
 }
 
 func TestBytesCloner(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-	}
+	opts := new(options).apply().correct()
 
 	var err error
 
@@ -596,7 +572,7 @@ func TestBytesCloner(t *testing.T) {
 	var tgtString string
 	err = bytesCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtString), reflect.ValueOf(srcBytes), opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, srcBytes, tgtString)
+	assert.EqualValues(t, string(base64.StdEncoding.EncodeToString(srcBytes)), tgtString)
 
 	var tgtAny any
 	err = bytesCloner(new(cloneContext), []string{}, reflect.ValueOf(&tgtAny), reflect.ValueOf(srcBytes), opts)
@@ -635,18 +611,7 @@ func TestBytesCloner(t *testing.T) {
 }
 
 func TestTimeCloner(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-		TargetTagKey: "",
-		DeepClone:    false,
-		NameComparer: nil,
-		TimeToInt: func(t time.Time) int64 {
-			return t.Unix()
-		},
-	}
+	opts := new(options).apply().correct()
 
 	var err error
 
@@ -695,12 +660,7 @@ func TestTimeCloner(t *testing.T) {
 }
 
 func TestStructCloner(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-	}
+	opts := new(options).apply().correct()
 
 	var err error
 
@@ -953,12 +913,7 @@ func TestMapCloner(t *testing.T) {
 }
 
 func TestSliceCloner(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-	}
+	opts := new(options).apply().correct()
 
 	var err error
 
@@ -968,7 +923,7 @@ func TestSliceCloner(t *testing.T) {
 	srcBytesSliceVal := reflect.ValueOf(srcBytesSlice)
 	err = sliceCloner(new(cloneContext), []string{}, tgtStringVal, srcBytesSliceVal, opts)
 	assert.NoError(t, err)
-	assert.EqualValues(t, "12ab", tgtString)
+	assert.EqualValues(t, base64.StdEncoding.EncodeToString(srcBytesSlice), tgtString)
 
 	var srcInt16Slice = []int16{math.MinInt16, math.MinInt8, math.MaxInt8, math.MaxInt16}
 	var tgtInt8Slice []int8
@@ -1005,12 +960,7 @@ func TestSliceCloner(t *testing.T) {
 }
 
 func TestArrayCloner(t *testing.T) {
-	opts := &options{
-		ValueHook:    make(map[reflect.Value]map[reflect.Value]Hook),
-		TypeHooks:    make(map[reflect.Type]map[reflect.Type]Hook),
-		KindHooks:    make(map[reflect.Kind]map[reflect.Kind]Hook),
-		SourceTagKey: "",
-	}
+	opts := new(options).apply().correct()
 
 	var err error
 
@@ -1230,36 +1180,59 @@ func TestRawBytes(t *testing.T) {
 //}
 
 type A struct {
-	B
-	C
+	B    `prototype:"boy,omitempty"`
+	C    `prototype:"cat,omitempty"`
 	ID   int    `prototype:"id,omitempty"`
 	Name string `prototype:"-"`
+	*D   `prototype:"dog,omitempty"`
+	E
 }
 
 type B struct {
-	ID   int    `prototype:"id,omitempty"`
-	Name string `prototype:"name,omitempty"`
+	ID      int    `prototype:"id,omitempty"`
+	Name    string `prototype:"name,omitempty"`
+	Address string `prototype:"address,omitempty"`
 }
 
 type C struct {
+	ID   int
+	Name string
+}
+
+type D struct {
 	ID   int    `prototype:"id,omitempty"`
 	Name string `prototype:"name,omitempty"`
+	Age  int    `prototype:"age,omitempty"`
+}
+
+type E struct {
+	ID     int
+	Name   string
+	Height int
 }
 
 func TestA(t *testing.T) {
 	a := A{
 		B: B{
-			ID:   2,
-			Name: "B",
+			ID:      2,
+			Name:    "B",
+			Address: "BB",
 		},
 		C: C{
 			ID:   3,
 			Name: "C",
 		},
-		ID: 1,
+		ID:   1,
+		Name: "A",
+		D: &D{
+			ID:   4,
+			Name: "D",
+			Age:  44,
+		},
 	}
 	t.Log(a.ID)
-	opts := new(options).apply(SourceTagKey("prototype"), TargetTagKey("prototype")).correct()
-	info := cachedStruct(reflect.TypeOf(a), opts)
-	t.Log(info)
+	t.Log(a.Name)
+	t.Log(a.Address)
+	t.Log(a.Age)
+	t.Log(a.Height)
 }

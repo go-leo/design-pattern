@@ -2,7 +2,6 @@ package prototype
 
 import (
 	"fmt"
-	"golang.org/x/exp/slices"
 	"reflect"
 	"sort"
 	"strings"
@@ -59,133 +58,17 @@ func cachedTypeFields(t reflect.Type, opts *options, tagKey string) jstructField
 	if f, ok := fieldCache.Load(key); ok {
 		return f.(jstructFields)
 	}
-	fields := typeFields(t, opts, tagKey)
+	fields := typeFields(t, opts)
 
 	f, _ := fieldCache.LoadOrStore(key, fields)
 	return f.(jstructFields)
-}
-
-type structFieldInfo struct {
-	reflect.StructField
-	ClonerFunc clonerFunc
-	SourceTag  *structFieldTagInfo
-	TargetTag  *structFieldTagInfo
-	Indexes    []int
-	Names      []string
-}
-
-type structInfo struct {
-	structFieldInfo
-	StructFields     []*structFieldInfo
-	AnonymousStructs []*structInfo
-}
-
-// cachedTypeFields is like typeFields but uses a cache to avoid repeated work.
-func cachedStruct(t reflect.Type, opts *options) *structInfo {
-	if f, ok := fieldCache.Load(t); ok {
-		return f.(*structInfo)
-	}
-	str := &structInfo{
-		structFieldInfo: structFieldInfo{StructField: reflect.StructField{Type: t}},
-	}
-	str.analysisStruct(new(structInfo), opts)
-	f, _ := fieldCache.LoadOrStore(t, str)
-	return f.(*structInfo)
-}
-
-func (str *structInfo) analysisStruct(parent *structInfo, opts *options) {
-	str.analysisField(parent, opts)
-	for i := 0; i < str.StructField.Type.NumField(); i++ {
-		structField := str.StructField.Type.Field(i)
-		// structField 非匿名字段
-		if !structField.Anonymous {
-			// 忽略非匿名未导出字段
-			if !structField.IsExported() {
-				continue
-			}
-
-			// 分析structField
-			structFieldInfo := &structFieldInfo{
-				StructField: structField,
-			}
-			structFieldInfo.analysisField(str, opts)
-			str.StructFields = append(str.StructFields, structFieldInfo)
-			continue
-		}
-		// structField 匿名字段
-		// 对于匿名字段，检查fieldType是否为指针类型，如果是，则将fieldType设置为指针所指向的类型。
-		if structField.Type.Kind() == reflect.Pointer {
-			structField.Type = structField.Type.Elem()
-		}
-		// 如果fieldType是结构体，放入AnonymousStructs列表中，递归解析
-		if structField.Type.Kind() == reflect.Struct {
-			anonymousStruct := &structInfo{
-				structFieldInfo: structFieldInfo{StructField: structField},
-			}
-			anonymousStruct.analysisStruct(str, opts)
-			str.AnonymousStructs = append(str.AnonymousStructs, anonymousStruct)
-			continue
-		}
-		// 如果structField不是导出字段，则忽略
-		if !structField.IsExported() {
-			continue
-		}
-		// 分析structField
-		info := &structFieldInfo{
-			StructField: structField,
-		}
-		info.analysisField(str, opts)
-		str.StructFields = append(str.StructFields, info)
-	}
-}
-
-type structFieldTagInfo struct {
-	Name     string
-	Options  []string
-	IsIgnore bool
-}
-
-func (sf *structFieldInfo) analysisField(parent *structInfo, opts *options) {
-	// 5. 接下来，它会获取字段的标签，并解析标签中的名称和选项。
-	sf.ClonerFunc = typeCloner(sf.Type, true, opts)
-	sf.SourceTag = sf.analysisTag(opts.SourceTagKey)
-	sf.TargetTag = sf.analysisTag(opts.TargetTagKey)
-	sf.Indexes = append(slices.Clone(parent.Indexes), sf.StructField.Index...)
-	sf.Names = append(slices.Clone(parent.Names), sf.Name)
-	return
-}
-
-func (sf *structFieldInfo) analysisTag(Key string) *structFieldTagInfo {
-	value, ok := sf.Tag.Lookup(Key)
-	// 没找到tag，或者value为空，正常返回
-	if !ok || len(value) <= 0 {
-		return &structFieldTagInfo{
-			Name:     "",
-			Options:  []string{},
-			IsIgnore: false,
-		}
-	}
-	// 如果是tag是"-",则忽略该字段
-	if value == "-" {
-		return &structFieldTagInfo{
-			Name:     "",
-			Options:  []string{},
-			IsIgnore: true,
-		}
-	}
-	values := strings.Split(value, ",")
-	return &structFieldTagInfo{
-		Name:     values[0],
-		Options:  values[1:],
-		IsIgnore: false,
-	}
 }
 
 // typeFields 函数返回给定类型应该被识别的字段列表。
 // 该算法是对要包含的结构体集合进行广度优先搜索 - 首先是顶级结构体，然后是任何可达的匿名结构体。
 // 简单来说，typeFields 函数用于获取应该处理的字段列表。
 // 它使用广度优先搜索算法遍历结构体类型，包括顶级结构体和可达的匿名结构体，并返回这些结构体中应该被处理的字段列表。
-func typeFields(t reflect.Type, opts *options, tagKey string) jstructFields {
+func typeFields(t reflect.Type, opts *options) jstructFields {
 	// current 和 next 两个用于存储当前和下一级的匿名字段的切片
 	current := make([]field, 0)
 	next := []field{{typ: t}}
@@ -238,7 +121,7 @@ func typeFields(t reflect.Type, opts *options, tagKey string) jstructFields {
 				}
 
 				// 5. 接下来，它会获取字段的标签，并解析标签中的名称和选项。
-				name, ok := tagName(sf, tagKey)
+				name, ok := tagName(sf, opts.TagKey)
 				if !ok {
 					continue
 				}

@@ -684,9 +684,12 @@ func setBytesToStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVa
 func setTimeToStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, t time.Time) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
+	case timeType:
+		tgtVal.Set(reflect.ValueOf(t))
+		return nil
+
 	case sqlNullTimeType:
 		return setScanner(e, fks, tgtVal, srcVal, opts, t)
-
 	case sqlNullStringType:
 		return setScanner(e, fks, tgtVal, srcVal, opts, opts.TimeToString(t))
 	case sqlNullInt16Type:
@@ -867,7 +870,6 @@ func setMapToMap(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal ref
 		tv.SetMapIndex(tgtEntryKeyVal, tgtEntryValVal)
 	}
 	return nil
-	//return map2MapCloner(e, fks, tv, srcVal, opts)
 }
 
 func setMapToAny(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value) error {
@@ -906,20 +908,20 @@ func setMapToAny(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal ref
 	return nil
 }
 
-func setMapToStruct(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func setMapToStruct(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options, tv reflect.Value) error {
 	pairs, err := kvPairs(srcVal)
 	if err != nil {
 		return err
 	}
-	tgtType := tgtVal.Type()
-	tgtFields := cachedTypeFields(tgtType, opts, opts.TargetTagKey)
+	tgtType := tv.Type()
+	tgtFields := cachedTypeFields(tgtType, opts, opts.TagKey)
 
 	for _, pair := range pairs {
 		tgtField, ok := findField(tgtFields.selfNameIndex, tgtFields.selfFields, opts, pair.keyStr)
 		if !ok {
 			continue
 		}
-		tVal := tgtVal.FieldByIndex(tgtField.index)
+		tVal := tv.FieldByIndex(tgtField.index)
 		valueCloner := typeCloner(pair.vVal.Type(), true, opts)
 		if err := valueCloner(e, append(slices.Clone(fks), pair.keyStr), tVal, pair.vVal, opts); err != nil {
 			return err

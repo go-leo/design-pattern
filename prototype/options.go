@@ -13,8 +13,7 @@ type options struct {
 	ValueHook    map[reflect.Value]map[reflect.Value]Hook
 	TypeHooks    map[reflect.Type]map[reflect.Type]Hook
 	KindHooks    map[reflect.Kind]map[reflect.Kind]Hook
-	SourceTagKey string
-	TargetTagKey string
+	TagKey       string
 	DeepClone    bool
 	NameComparer func(t, s string) bool
 	TimeToInt    func(t time.Time) int64
@@ -45,14 +44,8 @@ func (o *options) correct() *options {
 
 type Option func(o *options)
 
-func SourceTagKey(key string) Option {
+func TagKey(key string) Option {
 	return func(o *options) {
-		o.SourceTagKey = key
-	}
-}
-
-func TargetTagKey(key string) Option {
-	return func(o *options) {
-		o.TargetTagKey = key
+		o.TagKey = key
 	}
 }

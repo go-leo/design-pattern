@@ -588,7 +588,7 @@ func _mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 	case reflect.Interface:
 		return setMapToAny(e, fks, tgtVal, srcVal, opts, tv)
 	case reflect.Struct:
-		return setMapToStruct(e, fks, tv, srcVal, opts)
+		return setMapToStruct(e, fks, tgtVal, srcVal, opts, tv)
 	case reflect.Pointer:
 		return setPointer(e, fks, tgtVal, srcVal, opts, tv, _mapCloner)
 	default:
@@ -747,9 +747,9 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 
 func struct2StructCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	tgtType := tgtVal.Type()
-	tgtFields := cachedTypeFields(tgtType, opts, opts.TargetTagKey)
+	tgtFields := cachedTypeFields(tgtType, opts, opts.TagKey)
 	srcType := srcVal.Type()
-	srcFields := cachedTypeFields(srcType, opts, opts.SourceTagKey)
+	srcFields := cachedTypeFields(srcType, opts, opts.TagKey)
 	if err := struct2StructDominantFieldCloner(e, fks, tgtVal, srcVal, tgtType, srcType, tgtFields, srcFields, opts); err != nil {
 		return err
 	}
@@ -844,7 +844,7 @@ func struct2StructRecessivesFieldCloner(e *cloneContext, fks []string, tgtVal, s
 func struct2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	m := make(map[string]any)
 	srcType := srcVal.Type()
-	srcFields := cachedTypeFields(srcType, opts, opts.SourceTagKey)
+	srcFields := cachedTypeFields(srcType, opts, opts.TagKey)
 	for _, selfField := range srcFields.selfFields {
 		// 查找src字段值
 		srcDominantFieldVal, ok := findValue(srcVal, selfField)
@@ -888,7 +888,7 @@ func struct2AnyCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Valu
 
 func struct2MapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	srcType := srcVal.Type()
-	srcFields := cachedTypeFields(srcType, opts, opts.SourceTagKey)
+	srcFields := cachedTypeFields(srcType, opts, opts.TagKey)
 	tgtType := tgtVal.Type()
 
 	// 复制字段, 循环src字段
