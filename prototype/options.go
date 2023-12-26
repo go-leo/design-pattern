@@ -20,6 +20,8 @@ type options struct {
 	IntToTime    func(i int64) time.Time
 	StringToTime func(s string) time.Time
 	TimeToString func(t time.Time) string
+	GetterPrefix string
+	SetterPrefix string
 }
 
 func (o *options) apply(opts ...Option) *options {

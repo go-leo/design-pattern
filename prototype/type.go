@@ -18,6 +18,8 @@ var (
 	clonerFromType = reflect.TypeOf((*ClonerFrom)(nil)).Elem()
 	clonerToType   = reflect.TypeOf((*ClonerTo)(nil)).Elem()
 
+	errorType = reflect.TypeOf((*error)(nil)).Elem()
+
 	textMarshalerType = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
 	stringerType      = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
 

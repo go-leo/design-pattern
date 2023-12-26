@@ -3,7 +3,7 @@ module github.com/go-leo/design-pattern
 go 1.20
 
 require (
-	github.com/go-leo/gox v0.0.0-20231221120635-7f7d03735c2c
+	github.com/go-leo/gox v0.0.0-20231226014058-62c149678f35
 	github.com/json-iterator/go v1.1.12
 	github.com/kinbiko/jsonassert v1.1.1
 	github.com/smartystreets/goconvey v1.8.1

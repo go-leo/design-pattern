@@ -132,7 +132,7 @@ func boolCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 		tv.SetBool(b)
 		return nil
 	case reflect.Interface:
-		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, b)
+		return setAnyValue(e, fks, tv, srcVal, opts, b)
 	case reflect.String:
 		tv.SetString(strconv.FormatBool(b))
 		return nil
@@ -143,7 +143,7 @@ func boolCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 	case reflect.Float32, reflect.Float64:
 		return setFloat(fks, tv, float64(boolIntMap[b]))
 	case reflect.Pointer:
-		return setPointer(e, fks, tgtVal, srcVal, opts, tv, boolCloner)
+		return setPointer(e, fks, tv, srcVal, opts, boolCloner)
 	case reflect.Struct:
 		return setBoolToStruct(e, fks, tv, srcVal, opts, b)
 	default:
@@ -176,7 +176,7 @@ func intCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return setInt(fks, tv, i)
 	case reflect.Interface:
-		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, i)
+		return setAnyValue(e, fks, tv, srcVal, opts, i)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		return setInt2Uint(fks, tv, i)
 	case reflect.Float32, reflect.Float64:
@@ -188,7 +188,7 @@ func intCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts
 		tv.SetString(strconv.FormatInt(i, 10))
 		return nil
 	case reflect.Pointer:
-		return setPointer(e, fks, tgtVal, srcVal, opts, tv, intCloner)
+		return setPointer(e, fks, tv, srcVal, opts, intCloner)
 	case reflect.Struct:
 		return setIntToStruct(e, fks, tv, srcVal, opts, i)
 	default:
@@ -221,7 +221,7 @@ func uintCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		return setUint(fks, tv, u)
 	case reflect.Interface:
-		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, u)
+		return setAnyValue(e, fks, tv, srcVal, opts, u)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return setUint2Int(fks, tv, u)
 	case reflect.Float32, reflect.Float64:
@@ -233,7 +233,7 @@ func uintCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 		tv.SetString(strconv.FormatUint(u, 10))
 		return nil
 	case reflect.Pointer:
-		return setPointer(e, fks, tgtVal, srcVal, opts, tv, uintCloner)
+		return setPointer(e, fks, tv, srcVal, opts, uintCloner)
 	case reflect.Struct:
 		return setUintToStruct(e, fks, tv, srcVal, opts, u)
 	default:
@@ -266,7 +266,7 @@ func floatCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 	case reflect.Float32, reflect.Float64:
 		return setFloat(fks, tv, f)
 	case reflect.Interface:
-		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, f)
+		return setAnyValue(e, fks, tv, srcVal, opts, f)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return setFloat2Int(fks, tv, f)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
@@ -278,7 +278,7 @@ func floatCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 		tv.SetString(strconv.FormatFloat(f, 'f', -1, 64))
 		return nil
 	case reflect.Pointer:
-		return setPointer(e, fks, tgtVal, srcVal, opts, tv, floatCloner)
+		return setPointer(e, fks, tv, srcVal, opts, floatCloner)
 	case reflect.Struct:
 		return setFloatToStruct(e, fks, tv, srcVal, opts, f)
 	default:
@@ -326,7 +326,7 @@ func stringCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 		}
 		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	case reflect.Interface:
-		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, s)
+		return setAnyValue(e, fks, tv, srcVal, opts, s)
 	case reflect.Bool:
 		b, err := strconv.ParseBool(s)
 		if err != nil {
@@ -353,7 +353,7 @@ func stringCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 		}
 		return setFloat(fks, tv, f)
 	case reflect.Pointer:
-		return setPointer(e, fks, tgtVal, srcVal, opts, tv, stringCloner)
+		return setPointer(e, fks, tv, srcVal, opts, stringCloner)
 	case reflect.Struct:
 		return setStringToStruct(e, fks, tv, srcVal, opts, s)
 	default:
@@ -401,7 +401,7 @@ func bytesCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 		tv.SetString(base64.StdEncoding.EncodeToString(bs))
 		return nil
 	case reflect.Interface:
-		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, bs)
+		return setAnyValue(e, fks, tv, srcVal, opts, bs)
 	case reflect.Bool:
 		s := string(bs)
 		b, err := strconv.ParseBool(s)
@@ -432,9 +432,57 @@ func bytesCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 		}
 		return setFloat(fks, tv, f)
 	case reflect.Pointer:
-		return setPointer(e, fks, tgtVal, srcVal, opts, tv, bytesCloner)
+		return setPointer(e, fks, tv, srcVal, opts, bytesCloner)
 	case reflect.Struct:
 		return setBytesToStruct(e, fks, tv, srcVal, opts, bs)
+	default:
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
+	}
+}
+
+/*
+timeCloner 克隆time.Time类型
+time.IntToTime ----> ClonerFrom
+time.IntToTime ----> struct(time.IntToTime)
+time.IntToTime ----> any(time.IntToTime)
+time.IntToTime ----> string(time.RFC3339)
+time.IntToTime ----> []byte(time.RFC3339)
+time.IntToTime ----> int(time.Unix)
+time.IntToTime ----> uint(time.Unix)
+time.IntToTime ----> float(time.Unix)
+time.IntToTime ----> pointer
+*/
+func timeCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	if !tgtVal.IsValid() {
+		return nil
+	}
+	t := srcVal.Interface().(time.Time)
+	cloner, tv := indirectValue(tgtVal)
+	if cloner != nil {
+		return cloner.CloneFrom(t)
+	}
+	switch tv.Kind() {
+	case reflect.Struct:
+		return setTimeToStruct(e, fks, tv, srcVal, opts, t)
+	case reflect.Interface:
+		return setAnyValue(e, fks, tv, srcVal, opts, t)
+	case reflect.String:
+		tv.SetString(t.Format(time.RFC3339))
+		return nil
+	case reflect.Slice:
+		if tv.Type().Elem().Kind() == reflect.Uint8 {
+			tv.SetBytes([]byte(t.Format(time.RFC3339)))
+			return nil
+		}
+		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return setInt(fks, tv, opts.TimeToInt(t))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return setUint(fks, tv, uint64(opts.TimeToInt(t)))
+	case reflect.Float32, reflect.Float64:
+		return setFloat(fks, tv, float64(opts.TimeToInt(t)))
+	case reflect.Pointer:
+		return setPointer(e, fks, tv, srcVal, opts, timeCloner)
 	default:
 		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -466,54 +514,6 @@ func pointerCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, 
 		typeCloner(srcVal.Type().Elem(), true, opts),
 	)
 	return cloner(e, fks, tgtVal, srcVal.Elem(), opts)
-}
-
-/*
-timeCloner 克隆time.Time类型
-time.IntToTime ----> ClonerFrom
-time.IntToTime ----> struct(time.IntToTime)
-time.IntToTime ----> any(time.IntToTime)
-time.IntToTime ----> string(time.RFC3339)
-time.IntToTime ----> []byte(time.RFC3339)
-time.IntToTime ----> int(time.Unix)
-time.IntToTime ----> uint(time.Unix)
-time.IntToTime ----> float(time.Unix)
-time.IntToTime ----> pointer
-*/
-func timeCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	if !tgtVal.IsValid() {
-		return nil
-	}
-	t := srcVal.Interface().(time.Time)
-	cloner, tv := indirectValue(tgtVal)
-	if cloner != nil {
-		return cloner.CloneFrom(t)
-	}
-	switch tv.Kind() {
-	case reflect.Struct:
-		return setTimeToStruct(e, fks, tv, srcVal, opts, t)
-	case reflect.Interface:
-		return setAnyValue(e, fks, tgtVal, srcVal, opts, tv, t)
-	case reflect.String:
-		tv.SetString(t.Format(time.RFC3339))
-		return nil
-	case reflect.Slice:
-		if tv.Type().Elem().Kind() == reflect.Uint8 {
-			tv.SetBytes([]byte(t.Format(time.RFC3339)))
-			return nil
-		}
-		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return setInt(fks, tv, opts.TimeToInt(t))
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return setUint(fks, tv, uint64(opts.TimeToInt(t)))
-	case reflect.Float32, reflect.Float64:
-		return setFloat(fks, tv, float64(opts.TimeToInt(t)))
-	case reflect.Pointer:
-		return setPointer(e, fks, tgtVal, srcVal, opts, tv, timeCloner)
-	default:
-		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
-	}
 }
 
 /*
@@ -566,11 +566,11 @@ func arrayCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, op
 	}
 	switch tv.Kind() {
 	case reflect.Array, reflect.Slice:
-		return setSliceArray(e, fks, tgtVal, srcVal, opts, tv)
+		return setSliceArray(e, fks, tv, srcVal, opts)
 	case reflect.Interface:
-		return setAnySlice(e, fks, tgtVal, srcVal, opts, tv)
+		return setAnySlice(e, fks, tv, srcVal, opts)
 	case reflect.Pointer:
-		return setPointer(e, fks, tgtVal, srcVal, opts, tv, arrayCloner)
+		return setPointer(e, fks, tv, srcVal, opts, arrayCloner)
 	default:
 		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -595,13 +595,13 @@ func _mapCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opt
 
 	switch tv.Kind() {
 	case reflect.Map:
-		return setMapToMap(e, fks, tgtVal, srcVal, opts, tv)
+		return setMapToMap(e, fks, tv, srcVal, opts)
 	case reflect.Interface:
-		return setMapToAny(e, fks, tgtVal, srcVal, opts, tv)
+		return setMapToAny(e, fks, tv, srcVal, opts)
 	case reflect.Struct:
-		return setMapToStruct(e, fks, tgtVal, srcVal, opts, tv)
+		return setMapToStruct(e, fks, tv, srcVal, opts)
 	case reflect.Pointer:
-		return setPointer(e, fks, tgtVal, srcVal, opts, tv, _mapCloner)
+		return setPointer(e, fks, tv, srcVal, opts, _mapCloner)
 	default:
 		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
@@ -717,13 +717,13 @@ func structCloner(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, o
 
 		switch tv.Kind() {
 		case reflect.Struct:
-			return setStructToStruct(e, fks, tv, srcVal, opts, tv)
+			return setStructToStruct(e, fks, tv, srcVal, opts)
 		case reflect.Interface:
-			return setStructToAny(e, fks, tgtVal, srcVal, opts, tv)
+			return setStructToAny(e, fks, tv, srcVal, opts)
 		case reflect.Map:
-			return setStructToMap(e, fks, tgtVal, srcVal, opts, tv)
+			return setStructToMap(e, fks, tv, srcVal, opts)
 		case reflect.Pointer:
-			return setPointer(e, fks, tgtVal, srcVal, opts, tv, structCloner)
+			return setPointer(e, fks, tv, srcVal, opts, structCloner)
 		default:
 			return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 		}

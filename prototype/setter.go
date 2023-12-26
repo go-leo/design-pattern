@@ -3,7 +3,9 @@ package prototype
 import (
 	"database/sql"
 	"encoding/base64"
+	"github.com/go-leo/gox/mapx"
 	"github.com/go-leo/gox/mathx"
+	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -71,19 +73,19 @@ func setFloat2Uint(fks []string, tgtVal reflect.Value, f float64) error {
 	return setUint(fks, tgtVal, uint64(f))
 }
 
-func setPointer(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value, cloner func(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error) error {
-	if !tv.IsNil() {
-		return cloner(e, fks, tv, srcVal, opts)
+func setPointer(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, cloner func(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error) error {
+	if !tgtVal.IsNil() {
+		return cloner(e, fks, tgtVal, srcVal, opts)
 	}
-	tv.Set(reflect.New(tv.Type().Elem()))
-	return cloner(e, fks, tv, srcVal, opts)
+	tgtVal.Set(reflect.New(tgtVal.Type().Elem()))
+	return cloner(e, fks, tgtVal, srcVal, opts)
 }
 
-func setAnyValue(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value, i any) error {
-	if tv.NumMethod() > 0 {
+func setAnyValue(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, i any) error {
+	if tgtVal.NumMethod() > 0 {
 		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
-	tv.Set(reflect.ValueOf(i))
+	tgtVal.Set(reflect.ValueOf(i))
 	return nil
 }
 
@@ -791,24 +793,24 @@ func setTimeToStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal
 	}
 }
 
-func setSliceArray(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value) error {
+func setSliceArray(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
 	srcLen := srcVal.Len()
-	if tv.Kind() == reflect.Slice {
-		tv.Set(reflect.MakeSlice(tv.Type(), srcLen, srcLen))
+	if tgtVal.Kind() == reflect.Slice {
+		tgtVal.Set(reflect.MakeSlice(tgtVal.Type(), srcLen, srcLen))
 	}
-	tgtLen := tv.Len()
+	tgtLen := tgtVal.Len()
 	minLen := mathx.Min(srcLen, tgtLen)
 	elemCloner := typeCloner(srcVal.Type().Elem(), true, opts)
 	for i := 0; i < minLen; i++ {
-		if err := elemCloner(e, append(slices.Clone(fks), strconv.Itoa(i)), tv.Index(i), srcVal.Index(i), opts); err != nil {
+		if err := elemCloner(e, append(slices.Clone(fks), strconv.Itoa(i)), tgtVal.Index(i), srcVal.Index(i), opts); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func setAnySlice(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value) error {
-	if tv.NumMethod() > 0 {
+func setAnySlice(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
+	if tgtVal.NumMethod() > 0 {
 		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
 	srcLen := srcVal.Len()
@@ -822,14 +824,14 @@ func setAnySlice(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal ref
 		}
 	}
 	// 设置tgtVal
-	tv.Set(reflect.ValueOf(tgtSlice))
+	tgtVal.Set(reflect.ValueOf(tgtSlice))
 	return nil
 }
 
-func setMapToMap(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value) error {
-	tgtType := tv.Type()
-	if tv.IsNil() {
-		tv.Set(reflect.MakeMap(tgtType))
+func setMapToMap(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
+	tgtType := tgtVal.Type()
+	if tgtVal.IsNil() {
+		tgtVal.Set(reflect.MakeMap(tgtType))
 	}
 
 	srcType := srcVal.Type()
@@ -867,13 +869,13 @@ func setMapToMap(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal ref
 		if !tgtEntryValVal.IsValid() {
 			continue
 		}
-		tv.SetMapIndex(tgtEntryKeyVal, tgtEntryValVal)
+		tgtVal.SetMapIndex(tgtEntryKeyVal, tgtEntryValVal)
 	}
 	return nil
 }
 
-func setMapToAny(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tv reflect.Value) error {
-	if tv.NumMethod() > 0 {
+func setMapToAny(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
+	if tgtVal.NumMethod() > 0 {
 		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
 
@@ -905,14 +907,14 @@ func setMapToAny(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal ref
 		}
 		m[tgtEntryKey] = tgtEntryVal
 	}
-	tv.Set(reflect.ValueOf(m))
+	tgtVal.Set(reflect.ValueOf(m))
 	return nil
 }
 
-func setMapToStruct(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options, tv reflect.Value) error {
+func setMapToStruct(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	srcValCloner := typeCloner(srcVal.Type().Elem(), true, opts)
 
-	tgtStruct := cachedStruct(tv.Type(), opts)
+	tgtStruct := cachedStruct(tgtVal.Type(), opts)
 
 	srcMapIter := srcVal.MapRange()
 	for srcMapIter.Next() {
@@ -923,42 +925,46 @@ func setMapToStruct(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value,
 		}
 		entryFullKeys := append(slices.Clone(fks), keyStr)
 
-		tgtField, ok := tgtStruct.findField(keyStr, opts)
-		if !ok {
-			continue
-		}
-
-		tgtFieldValue, ok := tgtField.findSettableValue(tv)
-		if !ok {
-			continue
-		}
-
-		srcEntryValVal := srcMapIter.Value()
-		if err := srcValCloner(e, entryFullKeys, tgtFieldValue, srcEntryValVal, opts); err != nil {
+		ok, err := setValueToField(e, entryFullKeys, tgtVal, srcMapIter.Value(), opts, tgtStruct, keyStr, srcValCloner)
+		if err != nil {
 			return err
+		}
+		if ok {
+			continue
+		}
+		// 方法克隆
+		ok, err = setValueToSetter(e, entryFullKeys, tgtVal, srcMapIter.Value(), opts, tgtStruct, keyStr, srcValCloner)
+		if err != nil {
+			return err
+		}
+		if ok {
+			continue
 		}
 	}
 	return nil
 }
 
-func setStructToAny(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options, tv reflect.Value) error {
-	if tv.NumMethod() > 0 {
+func setStructToAny(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	if tgtVal.NumMethod() > 0 {
 		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
 	}
-	m := make(map[string]any)
+	m := make(map[any]any)
 	srcType := srcVal.Type()
-	srcFields := cachedStruct(srcType, opts)
-	err := srcFields.rangeFields(func(label string, field *fieldInfo) error {
+	srcStruct := cachedStruct(srcType, opts)
+	err := srcStruct.rangeFields(func(label string, field *fieldInfo) error {
 		var tgtEntryVal any
 		srcFieldVal, ok := field.findGettableValue(srcVal)
 		if !ok {
 			return nil
 		}
-		err := field.ClonerFunc(e, append(slices.Clone(fks), label), reflect.ValueOf(&tgtEntryVal), srcFieldVal, opts)
+
+		entryFullKeys := append(slices.Clone(fks), label)
+
+		err := field.ClonerFunc(e, entryFullKeys, reflect.ValueOf(&tgtEntryVal), srcFieldVal, opts)
 		if err != nil {
 			return err
 		}
-		m[label] = anyPBAnyType
+		m[label] = tgtEntryVal
 		return nil
 	})
 	if err != nil {
@@ -968,45 +974,146 @@ func setStructToAny(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value,
 	return nil
 }
 
-func setStructToMap(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options, tv reflect.Value) error {
-	tgtType := tv.Type()
+func setStructToMap(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	tgtType := tgtVal.Type()
 	tgtKeyType := tgtType.Key()
-	if !slices.Contains(allSampleKinds, tgtKeyType.Kind()) &&
-		!reflect.PointerTo(tgtKeyType).Implements(textUnmarshalerType) {
-		return unsupportedTypeCloner(e, fks, tgtVal, srcVal, opts)
-	}
-	if tv.IsNil() {
-		tv.Set(reflect.MakeMap(tgtType))
+	tgtValType := tgtType.Elem()
+
+	if tgtVal.IsNil() {
+		tgtVal.Set(reflect.MakeMap(tgtType))
 	}
 
 	srcType := srcVal.Type()
-	srcFields := cachedStruct(srcType, opts)
-	err := srcFields.rangeFields(func(label string, field *fieldInfo) error {
-		//tgtEntryKeyVal := reflect.New(tgtKeyType)
-		//if err := srcKeyCloner(e, append(slices.Clone(fks), keyStr), tgtEntryKeyVal, srcEntryKeyVal, opts); err != nil {
-		//	return err
-		//}
-		//tgtEntryKeyVal = tgtEntryKeyVal.Elem()
-		//if !tgtEntryKeyVal.IsValid() {
-		//	return nil
-		//}
-		//
-		//srcEntryValVal := srcMapIter.Value()
-		//tgtEntryValVal := reflect.New(tgtValType)
-		//if err := srcValCloner(e, append(slices.Clone(fks), keyStr), tgtEntryValVal, srcEntryValVal, opts); err != nil {
-		//	return err
-		//}
-		//tgtEntryValVal = tgtEntryValVal.Elem()
-		//if !tgtEntryValVal.IsValid() {
-		//	return nil
-		//}
-		//tv.SetMapIndex(tgtEntryKeyVal, tgtEntryValVal)
+	srcStruct := cachedStruct(srcType, opts)
+	err := srcStruct.rangeFields(func(label string, field *fieldInfo) error {
+		entryFullKeys := append(slices.Clone(fks), label)
+
+		srcFieldVal, ok := field.findGettableValue(srcVal)
+		if !ok {
+			return nil
+		}
+
+		tgtEntryKeyVal := reflect.New(tgtKeyType)
+		if err := stringCloner(e, entryFullKeys, tgtEntryKeyVal, reflect.ValueOf(label), opts); err != nil {
+			return err
+		}
+		tgtEntryKeyVal = tgtEntryKeyVal.Elem()
+		if !tgtEntryKeyVal.IsValid() {
+			return nil
+		}
+
+		tgtEntryValVal := reflect.New(tgtValType)
+		if err := field.ClonerFunc(e, entryFullKeys, tgtEntryValVal, srcFieldVal, opts); err != nil {
+			return err
+		}
+		tgtEntryValVal = tgtEntryValVal.Elem()
+		if !tgtEntryValVal.IsValid() {
+			return nil
+		}
+
+		tgtVal.SetMapIndex(tgtEntryKeyVal, tgtEntryValVal)
 		return nil
 	})
 	return err
 }
 
-func setStructToStruct(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options, tv reflect.Value) error {
+func setStructToStruct(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	srcType := srcVal.Type()
+	srcStruct := cachedStruct(srcType, opts)
 
+	tgtType := tgtVal.Type()
+	tgtStruct := cachedStruct(tgtType, opts)
+
+	labels := maps.Keys(mapx.Append(mapx.KeySet(srcStruct.FieldIndexes), mapx.KeySet(tgtStruct.FieldIndexes)))
+
+	for _, label := range labels {
+		entryFullKeys := append(slices.Clone(fks), label)
+		var srcFieldVal reflect.Value
+		var cloner clonerFunc
+		var err error
+		// 查找 source field
+		srcField, srcFieldVal, ok := getValueFromField(e, entryFullKeys, tgtVal, srcVal, opts, srcStruct, label)
+		if ok {
+			cloner = srcField.ClonerFunc
+		} else {
+			// 查找 source getter
+			srcFieldVal, ok, err = getValueFromGetter(e, entryFullKeys, tgtVal, srcVal, opts, srcStruct, label)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				continue
+			}
+			cloner = valueCloner(srcFieldVal, opts)
+		}
+
+		// 将 source field value 设置到 target field
+		ok, err = setValueToField(e, entryFullKeys, tgtVal, srcFieldVal, opts, tgtStruct, label, cloner)
+		if err != nil {
+			return err
+		}
+		if ok {
+			continue
+		}
+		// 上面失败，则将 source field value 设置到 target setter
+		ok, err = setValueToSetter(e, entryFullKeys, tgtVal, srcFieldVal, opts, tgtStruct, label, cloner)
+		if err != nil {
+			return err
+		}
+		if ok {
+			continue
+		}
+	}
 	return nil
+}
+
+func getValueFromField(_ *cloneContext, _ []string, _ reflect.Value, srcVal reflect.Value, opts *options, srcStruct *structInfo, label string) (*fieldInfo, reflect.Value, bool) {
+	srcField, ok := srcStruct.findField(label, opts)
+	if !ok {
+		return nil, reflect.Value{}, false
+	}
+	value, ok := srcField.findGettableValue(srcVal)
+	return srcField, value, ok
+}
+
+func getValueFromGetter(_ *cloneContext, _ []string, _ reflect.Value, srcVal reflect.Value, opts *options, srcStruct *structInfo, label string) (reflect.Value, bool, error) {
+	getter, ok := srcStruct.findGetter(label, srcVal, opts)
+	if !ok {
+		return reflect.Value{}, false, nil
+	}
+	outVal, err := srcStruct.invokeGetter(getter)
+	if err != nil {
+		return reflect.Value{}, true, err
+	}
+	return outVal, true, nil
+}
+
+func setValueToField(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tgtStruct *structInfo, label string, srcValCloner clonerFunc) (bool, error) {
+	tgtField, ok := tgtStruct.findField(label, opts)
+	if !ok {
+		return false, nil
+	}
+	tgtFieldValue, ok := tgtField.findSettableValue(tgtVal)
+	if !ok {
+		return false, nil
+	}
+	if err := srcValCloner(e, fks, tgtFieldValue, srcVal, opts); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
+func setValueToSetter(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tgtStruct *structInfo, label string, srcValCloner clonerFunc) (bool, error) {
+	setter, ok := tgtStruct.findSetter(label, tgtVal, opts)
+	if !ok {
+		return false, nil
+	}
+	inVal := reflect.New(setter.Type().In(0)).Elem()
+	if err := srcValCloner(e, fks, inVal, srcVal, opts); err != nil {
+		return true, err
+	}
+	if err := tgtStruct.invokeSetter(inVal, setter); err != nil {
+		return true, err
+	}
+	return true, nil
 }
