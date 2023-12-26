@@ -3,6 +3,7 @@ package prototype_test
 import (
 	"database/sql"
 	"encoding/base64"
+	"fmt"
 	"github.com/go-leo/design-pattern/prototype"
 	"github.com/go-leo/gox/errorx"
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -1073,4 +1075,55 @@ func TestGetterSetterCloner(t *testing.T) {
 		age:     age * 2,
 		address: "china-" + address,
 	}, tgt)
+}
+
+type unexportedPtrFieldNested struct {
+	A string
+}
+
+func (a unexportedPtrFieldNested) PrintA() {
+	fmt.Println("PrintA:" + a.A)
+}
+
+func (a *unexportedPtrFieldNested) PrintB() {
+	fmt.Println("PrintB:" + a.A)
+}
+
+type unexportedPtrFieldParentA struct {
+	*unexportedPtrFieldNested
+}
+type unexportedPtrFieldParentB struct {
+	*unexportedPtrFieldNested
+}
+
+func TestNested(t *testing.T) {
+	from := unexportedPtrFieldParentA{unexportedPtrFieldNested: &unexportedPtrFieldNested{A: "a"}}
+	to := unexportedPtrFieldParentB{}
+
+	fromType := reflect.TypeOf(from)
+	fromVal := reflect.ValueOf(from)
+	for i := 0; i < fromType.NumMethod(); i++ {
+		fmt.Println("fromType", fromType.Method(i))
+		fromVal.Method(fromType.Method(i).Index).Call([]reflect.Value{})
+	}
+	fromPtrType := reflect.TypeOf(&from)
+	fromPtrVal := reflect.ValueOf(&from)
+	for i := 0; i < fromPtrType.NumMethod(); i++ {
+		fmt.Println("fromPtrType", fromPtrType.Method(i))
+		fromPtrVal.Method(fromPtrType.Method(i).Index).Call([]reflect.Value{})
+	}
+
+	toType := reflect.TypeOf(to)
+	toVal := reflect.ValueOf(to)
+	for i := 0; i < toType.NumMethod(); i++ {
+		fmt.Println("toType", toType.Method(i))
+		toVal.Method(toType.Method(i).Index).Call([]reflect.Value{})
+	}
+	toPtrType := reflect.TypeOf(&to)
+	toPtrVal := reflect.ValueOf(&to)
+	for i := 0; i < toPtrType.NumMethod(); i++ {
+		fmt.Println("toPtrType", toPtrType.Method(i))
+		toPtrVal.Method(toPtrType.Method(i).Index).Call([]reflect.Value{})
+	}
+
 }

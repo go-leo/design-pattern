@@ -58,7 +58,7 @@ func (e Error) Error() string {
 	case FailedStringify:
 		return fmt.Sprintf("prototype: failed to stringify, target type %s, %v", e.SourceType.String(), e.err)
 	case FailedSetEmbeddedPointer:
-		return fmt.Sprintf("prototype: failed to set embedded pointer, %s, to unexported struct: %v", keys, e.TargetType.String())
+		return fmt.Sprintf("prototype: failed to set embedded pointer, %s, unexported struct %v", keys, e.TargetType.String())
 	default:
 		return ""
 	}

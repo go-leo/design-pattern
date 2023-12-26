@@ -433,54 +433,57 @@ type structInfo struct {
 	StructMethodIndexes  map[string]*methodInfo
 	PointerMethodIndexes map[string]*methodInfo
 	// 匿名字段
-	AnonymousFields []*fieldInfo
+	//AnonymousFields []*fieldInfo
 }
 
-func (str *structInfo) analysis(opts *options) {
-	// 字段解析
+func (str *structInfo) analysis(opts *options) *structInfo {
+	// 字段分析
 	str.analysisFields(opts)
-	// 方法解析
+	// 方法分析
 	str.analysisMethods(opts)
+	// 匿名分析
+	//str.analysisAnonymous(opts)
+	return str
 }
 
 func (str *structInfo) analysisFields(opts *options) {
-	// 字段解析
+	// 字段分析
 	for i := 0; i < str.Type.NumField(); i++ {
-		structField := str.Type.Field(i)
-		// structField 非匿名字段
-		if !structField.Anonymous {
-			// 忽略非匿名未导出字段
-			if !structField.IsExported() {
-				continue
-			}
-			// 分析structField
-			str.analysisField(structField, opts)
+		field := &fieldInfo{StructField: str.Type.Field(i)}
+		// 可导出的字段，可以分析
+		if field.IsExported() {
+			field.analysis(opts)
+			str.FieldIndexes[field.Label] = field
 			continue
 		}
-		// structField 匿名字段
-		// 对于匿名字段，检查fieldType是否为指针类型，如果是，则将fieldType设置为指针所指向的类型。
-		fieldType := structField.Type
-		if fieldType.Kind() == reflect.Pointer {
-			fieldType = fieldType.Elem()
-		}
-		// 如果fieldType是结构体，放入AnonymousStructs列表中，等待递归解析
-		if fieldType.Kind() == reflect.Struct {
-			// 分析structField
-			str.analysisField(structField, opts)
+
+		// 不可导出、不匿名字段，忽略
+		if !field.Anonymous {
 			continue
 		}
-		// 如果structField不是导出字段，则忽略
-		if !structField.IsExported() {
+
+		// 不可导出，匿名的结构体字段, 可以分析
+		if field.Type.Kind() == reflect.Struct {
+			field.analysis(opts)
+			str.FieldIndexes[field.Label] = field
 			continue
 		}
-		// 分析structField
-		str.analysisField(structField, opts)
+
+		// 不可导出，匿名的结构体指针字段, 可以分析
+		if field.Type.Kind() == reflect.Pointer &&
+			field.Type.Elem().Kind() == reflect.Struct {
+			field.analysis(opts)
+			str.FieldIndexes[field.Label] = field
+			continue
+		}
+
+		// 其他不可导出的字段，忽略
 	}
 }
 
 func (str *structInfo) analysisMethods(opts *options) {
+	// 方法分析
 	typ := str.Type
-	// 方法解析
 	for i := 0; i < typ.NumMethod(); i++ {
 		method := typ.Method(i)
 		// 忽略未导出方法
@@ -500,12 +503,15 @@ func (str *structInfo) analysisMethods(opts *options) {
 	}
 }
 
-func (str *structInfo) analysisField(structField reflect.StructField, opts *options) {
-	field := &fieldInfo{StructField: structField}
-	field.analysis(opts)
-	str.FieldIndexes[field.Label] = field
-	if structField.Anonymous {
-		str.AnonymousFields = append(str.AnonymousFields, field)
+func (str *structInfo) analysisAnonymous(opts *options) {
+	for label, field := range str.FieldIndexes {
+		if !field.Anonymous {
+			continue
+		}
+		info := cachedStruct(field.Type, opts)
+
+		_ = label
+		_ = info
 	}
 }
 
@@ -644,16 +650,14 @@ func (str *structInfo) rangeFields(f func(label string, field *fieldInfo) error)
 
 type fieldInfo struct {
 	reflect.StructField
-	Indexes    []int
-	ClonerFunc clonerFunc
-	WithTag    bool
-	Label      string
-	Options    []string
-	IsIgnore   bool
+	Indexes  []int
+	WithTag  bool
+	Label    string
+	Options  []string
+	IsIgnore bool
 }
 
-func (sf *fieldInfo) analysis(opts *options) {
-	sf.ClonerFunc = typeCloner(sf.Type, true, opts)
+func (sf *fieldInfo) analysis(opts *options) *fieldInfo {
 	sf.Indexes = slices.Clone(sf.StructField.Index)
 	tagValue := sf.Tag.Get(opts.TagKey)
 	// 如果是tag是"-",则忽略该字段
@@ -662,7 +666,7 @@ func (sf *fieldInfo) analysis(opts *options) {
 		sf.Label = ""
 		sf.Options = []string{}
 		sf.IsIgnore = true
-		return
+		return sf
 	}
 	// 没找到tag，或者value为空，默认的字段名
 	if len(tagValue) <= 0 {
@@ -670,7 +674,7 @@ func (sf *fieldInfo) analysis(opts *options) {
 		sf.Label = sf.StructField.Name
 		sf.Options = []string{}
 		sf.IsIgnore = false
-		return
+		return sf
 	}
 	// 以","分割value，
 	values := strings.Split(tagValue, ",")
@@ -678,18 +682,19 @@ func (sf *fieldInfo) analysis(opts *options) {
 	sf.Label = values[0]
 	sf.Options = values[1:]
 	sf.IsIgnore = false
+	return sf
 }
 
 func (sf *fieldInfo) findGettableValue(val reflect.Value) (reflect.Value, bool) {
 	outVal := val
 	for _, i := range sf.Indexes {
+		outVal = outVal.Field(i)
 		if outVal.Kind() == reflect.Pointer {
 			if outVal.IsNil() {
 				return reflect.Value{}, false
 			}
 			outVal = outVal.Elem()
 		}
-		outVal = outVal.Field(i)
 	}
 	return outVal, true
 }
@@ -697,6 +702,7 @@ func (sf *fieldInfo) findGettableValue(val reflect.Value) (reflect.Value, bool) 
 func (sf *fieldInfo) findSettableValue(val reflect.Value) (reflect.Value, bool) {
 	outVal := val
 	for _, i := range sf.Indexes {
+		outVal = outVal.Field(i)
 		if outVal.Kind() == reflect.Pointer {
 			if outVal.IsNil() {
 				if !outVal.CanSet() {
@@ -706,7 +712,6 @@ func (sf *fieldInfo) findSettableValue(val reflect.Value) (reflect.Value, bool) 
 			}
 			outVal = outVal.Elem()
 		}
-		outVal = outVal.Field(i)
 	}
 	return outVal, true
 }
@@ -721,7 +726,7 @@ func newStructInfo(t reflect.Type) *structInfo {
 		FieldIndexes:         make(map[string]*fieldInfo),
 		StructMethodIndexes:  make(map[string]*methodInfo),
 		PointerMethodIndexes: make(map[string]*methodInfo),
-		AnonymousFields:      make([]*fieldInfo, 0),
+		//AnonymousFields:      make([]*fieldInfo, 0),
 	}
 }
 
@@ -729,8 +734,6 @@ func cachedStruct(t reflect.Type, opts *options) *structInfo {
 	if f, ok := fieldCache.Load(t); ok {
 		return f.(*structInfo)
 	}
-	info := newStructInfo(t)
-	info.analysis(opts)
-	f, _ := fieldCache.LoadOrStore(t, info)
+	f, _ := fieldCache.LoadOrStore(t, newStructInfo(t).analysis(opts))
 	return f.(*structInfo)
 }

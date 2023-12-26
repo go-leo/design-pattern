@@ -967,7 +967,8 @@ func setStructToAny(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value,
 
 		entryFullKeys := append(slices.Clone(fks), label)
 
-		err := field.ClonerFunc(e, entryFullKeys, reflect.ValueOf(&tgtEntryVal), srcFieldVal, opts)
+		cloner := typeCloner(srcFieldVal.Type(), true, opts)
+		err := cloner(e, entryFullKeys, reflect.ValueOf(&tgtEntryVal), srcFieldVal, opts)
 		if err != nil {
 			return err
 		}
@@ -1010,7 +1011,9 @@ func setStructToMap(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value,
 		}
 
 		tgtEntryValVal := reflect.New(tgtValType)
-		if err := field.ClonerFunc(e, entryFullKeys, tgtEntryValVal, srcFieldVal, opts); err != nil {
+
+		cloner := typeCloner(srcFieldVal.Type(), true, opts)
+		if err := cloner(e, entryFullKeys, tgtEntryValVal, srcFieldVal, opts); err != nil {
 			return err
 		}
 		tgtEntryValVal = tgtEntryValVal.Elem()
@@ -1039,9 +1042,9 @@ func setStructToStruct(e *cloneContext, fks []string, tgtVal, srcVal reflect.Val
 		var cloner clonerFunc
 		var err error
 		// 查找 source field
-		srcField, srcFieldVal, ok := getValueFromField(e, entryFullKeys, tgtVal, srcVal, opts, srcStruct, label)
+		srcFieldVal, ok := getValueFromField(e, entryFullKeys, tgtVal, srcVal, opts, srcStruct, label)
 		if ok {
-			cloner = srcField.ClonerFunc
+			cloner = typeCloner(srcFieldVal.Type(), true, opts)
 		} else {
 			// 查找 source getter
 			srcFieldVal, ok, err = getValueFromGetter(e, entryFullKeys, tgtVal, srcVal, opts, srcStruct, label)
@@ -1074,13 +1077,13 @@ func setStructToStruct(e *cloneContext, fks []string, tgtVal, srcVal reflect.Val
 	return nil
 }
 
-func getValueFromField(_ *cloneContext, _ []string, _ reflect.Value, srcVal reflect.Value, opts *options, srcStruct *structInfo, label string) (*fieldInfo, reflect.Value, bool) {
+func getValueFromField(_ *cloneContext, _ []string, _ reflect.Value, srcVal reflect.Value, opts *options, srcStruct *structInfo, label string) (reflect.Value, bool) {
 	srcField, ok := srcStruct.findField(label, opts)
 	if !ok {
-		return nil, reflect.Value{}, false
+		return reflect.Value{}, false
 	}
 	value, ok := srcField.findGettableValue(srcVal)
-	return srcField, value, ok
+	return value, ok
 }
 
 func getValueFromGetter(_ *cloneContext, _ []string, _ reflect.Value, srcVal reflect.Value, opts *options, srcStruct *structInfo, label string) (reflect.Value, bool, error) {
