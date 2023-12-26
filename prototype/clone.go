@@ -2,7 +2,73 @@ package prototype
 
 import (
 	"reflect"
+	"strings"
+	"time"
 )
+
+// Hook is a hook.
+type Hook func(fullKeys []string, tgtVal reflect.Value, srcVal reflect.Value) error
+
+type options struct {
+	ValueHook    map[reflect.Value]map[reflect.Value]Hook
+	TypeHooks    map[reflect.Type]map[reflect.Type]Hook
+	KindHooks    map[reflect.Kind]map[reflect.Kind]Hook
+	TagKey       string
+	DeepClone    bool
+	NameComparer func(t, s string) bool
+	IntToTime    func(i int64) time.Time
+	StringToTime func(s string) (time.Time, error)
+	TimeToInt    func(t time.Time) int64
+	TimeToString func(t time.Time) string
+	GetterPrefix string
+	SetterPrefix string
+}
+
+func (o *options) apply(opts ...Option) *options {
+	for _, opt := range opts {
+		opt(o)
+	}
+	return o
+}
+
+func (o *options) correct() *options {
+	if o.NameComparer == nil {
+		o.NameComparer = strings.EqualFold
+	}
+	if o.IntToTime == nil {
+		o.IntToTime = func(i int64) time.Time { return time.Unix(i, 0) }
+	}
+	if o.StringToTime == nil {
+		o.StringToTime = func(s string) (time.Time, error) { return time.ParseInLocation(time.DateTime, s, time.Local) }
+	}
+	if o.TimeToInt == nil {
+		o.TimeToInt = func(t time.Time) int64 { return t.Unix() }
+	}
+	if o.TimeToString == nil {
+		o.TimeToString = func(t time.Time) string { return t.Local().Format(time.DateTime) }
+	}
+	return o
+}
+
+type Option func(o *options)
+
+func TagKey(key string) Option {
+	return func(o *options) {
+		o.TagKey = key
+	}
+}
+
+func GetterPrefix(p string) Option {
+	return func(o *options) {
+		o.GetterPrefix = p
+	}
+}
+
+func SetterPrefix(p string) Option {
+	return func(o *options) {
+		o.SetterPrefix = p
+	}
+}
 
 // Clone 将值从 src 克隆到 tgt
 func Clone(tgt any, src any, opts ...Option) error {

@@ -541,10 +541,17 @@ func setStringToStruct(e *cloneContext, fks []string, tgtVal reflect.Value, srcV
 		}
 		return setScanner(e, fks, tgtVal, srcVal, opts, b)
 	case sqlNullTimeType:
-		return setScanner(e, fks, tgtVal, srcVal, opts, opts.StringToTime(s))
+		t, err := opts.StringToTime(s)
+		if err != nil {
+			return newParseError(fks, tgtVal.Type(), s, err)
+		}
+		return setScanner(e, fks, tgtVal, srcVal, opts, t)
 
 	case timestampPBTimestampType:
-		t := opts.StringToTime(s)
+		t, err := opts.StringToTime(s)
+		if err != nil {
+			return newParseError(fks, tgtVal.Type(), s, err)
+		}
 		tgtVal.FieldByName("Seconds").SetInt(t.Unix())
 		tgtVal.FieldByName("Nanos").SetInt(int64(t.Nanosecond()))
 		return nil

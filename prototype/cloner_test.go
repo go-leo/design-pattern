@@ -3,9 +3,9 @@ package prototype_test
 import (
 	"database/sql"
 	"encoding/base64"
-	"errors"
 	"github.com/go-leo/design-pattern/prototype"
 	"github.com/go-leo/gox/errorx"
+	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -866,8 +866,6 @@ func (x *testMapSetter) Age(age int) error {
 	return nil
 }
 
-var testAgeErr = errors.New("age error")
-
 func TestMapSetterCloner(t *testing.T) {
 	srcMap := map[string]any{
 		"msg":      "success",
@@ -1028,232 +1026,51 @@ func TestStructCloner(t *testing.T) {
 type testGetter struct {
 	id      string
 	name    string
-	Age     int
-	Address string
+	Age     int    `prototype:"age"`
+	Address string `prototype:"address"`
 }
 
 func (t testGetter) Id() string {
-	return t.id
+	return "id:" + t.id
 }
 
 func (t testGetter) Name() (string, error) {
-	return t.name, nil
+	return "name:" + t.name, nil
 }
 
 type testSetter struct {
-	Id      string
-	Name    string
+	Id      string `prototype:"id"`
+	Name    string `prototype:"name"`
 	age     int
 	address string
 }
 
+func (t *testSetter) SetAge(age int) {
+	t.age = age * 2
+}
+
+func (t *testSetter) SetAddress(address string) {
+	t.address = "china-" + address
+}
+
 func TestGetterSetterCloner(t *testing.T) {
-
-}
-
-//
-//type User struct {
-//	Name     string
-//	Birthday *time.IntToTime
-//	Nickname string
-//	Role     string
-//	Age      int32
-//	FakeAge  *int32
-//	Notes    []string
-//	flags    []byte
-//}
-//
-//type Employee struct {
-//	_User     *User
-//	Name      string
-//	Birthday  *time.IntToTime
-//	NickName  *string
-//	Age       int64
-//	FakeAge   int
-//	EmployeID int64
-//	DoubleAge int32
-//	SuperRule string
-//	Notes     []*string
-//	flags     []byte
-//}
-//
-//func TestCopyStruct(t *testing.T) {
-//	var fakeAge int32 = 12
-//	user := User{
-//		Name:     "Jinzhu",
-//		Nickname: "jinzhu",
-//		Age:      18,
-//		FakeAge:  &fakeAge,
-//		Role:     "Admin",
-//		Notes:    []string{"hello world", "welcome"},
-//		flags:    []byte{'x'},
-//	}
-//	employee := Employee{}
-//
-//	if err := Clone(employee, &user); err == nil {
-//		t.Errorf("Copy to unaddressable value should get error")
-//	}
-//
-//	Clone(&employee, &user)
-//	checkEmployee(employee, user, t, "Copy From Ptr To Ptr")
-//
-//	employee2 := Employee{}
-//	Clone(&employee2, user)
-//	checkEmployee(employee2, user, t, "Copy From Struct To Ptr")
-//
-//	employee3 := Employee{}
-//	ptrToUser := &user
-//	Clone(&employee3, &ptrToUser)
-//	checkEmployee(employee3, user, t, "Copy From Double Ptr To Ptr")
-//
-//	employee4 := &Employee{}
-//	Clone(&employee4, user)
-//	checkEmployee(*employee4, user, t, "Copy From Ptr To Double Ptr")
-//
-//	employee5 := &Employee{}
-//	Clone(&employee5, &employee)
-//	checkEmployee(*employee5, user, t, "Copy From Employee To Employee")
-//}
-//
-//func checkEmployee(employee Employee, user User, t *testing.T, testCase string) {
-//	if employee.Name != user.Name {
-//		t.Errorf("%v: Name haven't been copied correctly.", testCase)
-//	}
-//	if employee.NickName == nil || *employee.NickName != user.Nickname {
-//		t.Errorf("%v: NickName haven't been copied correctly.", testCase)
-//	}
-//	if employee.Birthday == nil && user.Birthday != nil {
-//		t.Errorf("%v: Birthday haven't been copied correctly.", testCase)
-//	}
-//	if employee.Birthday != nil && user.Birthday == nil {
-//		t.Errorf("%v: Birthday haven't been copied correctly.", testCase)
-//	}
-//	if employee.Birthday != nil && user.Birthday != nil &&
-//		!employee.Birthday.Equal(*(user.Birthday)) {
-//		t.Errorf("%v: Birthday haven't been copied correctly.", testCase)
-//	}
-//	if employee.Age != int64(user.Age) {
-//		t.Errorf("%v: Age haven't been copied correctly.", testCase)
-//	}
-//	if user.FakeAge != nil && employee.FakeAge != int(*user.FakeAge) {
-//		t.Errorf("%v: FakeAge haven't been copied correctly.", testCase)
-//	}
-//
-//	if len(employee.Notes) != len(user.Notes) {
-//		t.Fatalf("%v: Copy from slice doesn't work, employee notes len: %v, user: %v", testCase, len(employee.Notes), len(user.Notes))
-//	}
-//
-//	for idx, note := range user.Notes {
-//		if note != *employee.Notes[idx] {
-//			t.Fatalf("%v: Copy from slice doesn't work, notes idx: %v employee: %v user: %v", testCase, idx, *employee.Notes[idx], note)
-//		}
-//	}
-//	if employee.SuperRule != "Super "+user.Role {
-//		t.Errorf("%v: Copy to method doesn't work", testCase)
-//	}
-//}
-
-//func TestScanner(t *testing.T) {
-//	var value uint64 = math.MaxUint64
-//
-//	var f = float32(value)
-//	fmt.Println(f)
-//
-//	nullBool := sql.NullBool{}
-//	err := nullBool.Scan(value)
-//	assert.NoError(t, err)
-//	t.Log(nullBool)
-//
-//	nullByte := sql.NullByte{}
-//	err = nullByte.Scan(value)
-//	assert.NoError(t, err)
-//	t.Log(nullByte)
-//
-//	nullInt16 := sql.NullInt16{}
-//	err = nullInt16.Scan(value)
-//	assert.NoError(t, err)
-//	t.Log(nullInt16)
-//
-//	nullInt32 := sql.NullInt32{}
-//	err = nullInt32.Scan(value)
-//	assert.NoError(t, err)
-//	t.Log(nullInt32)
-//
-//	nullInt64 := sql.NullInt64{}
-//	err = nullInt64.Scan(value)
-//	assert.NoError(t, err)
-//	t.Log(nullInt64)
-//
-//	nullFloat64 := sql.NullFloat64{}
-//	err = nullFloat64.Scan(value)
-//	assert.NoError(t, err)
-//	t.Log(nullFloat64)
-//
-//	nullString := sql.NullString{}
-//	err = nullString.Scan(value)
-//	assert.NoError(t, err)
-//	t.Log(nullString)
-//
-//	nullTime := sql.NullTime{}
-//	err = nullTime.Scan(time.TimeToInt(int64(value), 0))
-//	assert.NoError(t, err)
-//	t.Log(nullTime)
-//}
-
-type A struct {
-	B    `prototype:"boy,omitempty"`
-	C    `prototype:"cat,omitempty"`
-	ID   int    `prototype:"id,omitempty"`
-	Name string `prototype:"-"`
-	*D   `prototype:"dog,omitempty"`
-	E
-}
-
-type B struct {
-	ID      int    `prototype:"id,omitempty"`
-	Name    string `prototype:"name,omitempty"`
-	Address string `prototype:"address,omitempty"`
-}
-
-type C struct {
-	ID   int
-	Name string
-}
-
-type D struct {
-	ID   int    `prototype:"id,omitempty"`
-	Name string `prototype:"name,omitempty"`
-	Age  int    `prototype:"age,omitempty"`
-}
-
-type E struct {
-	ID     int
-	Name   string
-	Height int
-}
-
-func TestA(t *testing.T) {
-	a := A{
-		B: B{
-			ID:      2,
-			Name:    "B",
-			Address: "BB",
-		},
-		C: C{
-			ID:   3,
-			Name: "C",
-		},
-		ID:   1,
-		Name: "A",
-		D: &D{
-			ID:   4,
-			Name: "D",
-			Age:  44,
-		},
+	id := uuid.NewString()
+	name := "prototype"
+	age := 30
+	address := "shanghai"
+	src := testGetter{
+		id:      id,
+		name:    name,
+		Age:     age,
+		Address: address,
 	}
-	t.Log(a.ID)
-	t.Log(a.Name)
-	t.Log(a.Address)
-	t.Log(a.Age)
-	t.Log(a.Height)
+	var tgt testSetter
+	err := prototype.Clone(&tgt, src, prototype.TagKey("prototype"), prototype.SetterPrefix("Set"))
+	assert.NoError(t, err)
+	assert.EqualValues(t, testSetter{
+		Id:      "id:" + id,
+		Name:    "name:" + name,
+		age:     age * 2,
+		address: "china-" + address,
+	}, tgt)
 }
