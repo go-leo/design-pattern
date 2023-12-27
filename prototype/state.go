@@ -43,17 +43,17 @@ func (e *cloneContext) forget(ptr any) {
 }
 
 func (e *cloneContext) checkPointerCycle(ptrFunc func(srcVal reflect.Value) any, cloner clonerFunc) clonerFunc {
-	return func(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	return func(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 		if e.forward(); e.isTooDeep() {
 			ptr := ptrFunc(srcVal)
 			if e.isSeen(ptr) {
-				return newPointerCycleError(fks, srcVal.Type())
+				return newPointerCycleError(labels, srcVal.Type())
 			}
 			e.remember(ptr)
 			defer e.forget(ptr)
 		}
 		defer e.back()
-		return cloner(e, fks, tgtVal, srcVal, opts)
+		return cloner(e, labels, tgtVal, srcVal, opts)
 	}
 }
 

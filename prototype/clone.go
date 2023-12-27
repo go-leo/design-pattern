@@ -7,7 +7,7 @@ import (
 )
 
 // Hook is a hook.
-type Hook func(fullKeys []string, tgtVal reflect.Value, srcVal reflect.Value) error
+type Hook func(labels []string, tgtVal reflect.Value, srcVal reflect.Value) error
 
 type options struct {
 	ValueHook    map[reflect.Value]map[reflect.Value]Hook
