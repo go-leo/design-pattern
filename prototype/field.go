@@ -368,10 +368,17 @@ func (s *structInfo) AnalysisMethods(opts *options) {
 }
 
 func (s *structInfo) AnalysisAnonymous(opts *options) {
+	anmIndexes := make(map[string][]*fieldInfo)
+	anmDominantIndexes := make(map[string][]*fieldInfo)
+
 	for _, field := range s.AnonymousStructs {
+
+		// 忽略非匿名字段
 		if !field.Anonymous {
 			continue
 		}
+
+		// 只处理匿名的结构体和结构体指针字段
 		var anmStruct *structInfo
 		if field.Type.Kind() == reflect.Struct {
 			anmStruct = cachedStruct(field.Type, opts)
@@ -383,15 +390,21 @@ func (s *structInfo) AnalysisAnonymous(opts *options) {
 			continue
 		}
 
-		anmIndexes := make(map[string][]*fieldInfo)
+		// 先处理匿名的自有字段，如果和当前结构体的字段冲突，则忽略
 		for label, anmField := range anmStruct.FieldIndexes {
 			if _, ok := s.FieldIndexes[label]; ok {
 				continue
 			}
-			anmIndexes[label] = append(anmIndexes[label], anmField)
+			if anmField.Type.Kind() == reflect.Struct {
+				continue
+			}
+			if field.Type.Kind() == reflect.Pointer && field.Type.Elem().Kind() == reflect.Struct {
+				continue
+			}
+			anmIndexes[label] = append(anmIndexes[label], anmField.Clone().UnshiftIndex(field.Indexes))
 		}
 
-		anmDominantIndexes := make(map[string][]*fieldInfo)
+		// 再处理匿名的字段的匿名字段，如果和当前结构体的字段和匿名的字段冲突，则忽略
 		for label, anmField := range anmStruct.AnonymousDominantIndexes {
 			if _, ok := s.FieldIndexes[label]; ok {
 				continue
@@ -399,21 +412,21 @@ func (s *structInfo) AnalysisAnonymous(opts *options) {
 			if _, ok := anmIndexes[label]; ok {
 				continue
 			}
-			anmDominantIndexes[label] = append(anmDominantIndexes[label], anmField)
+			anmDominantIndexes[label] = append(anmDominantIndexes[label], anmField.Clone().UnshiftIndex(field.Indexes))
 		}
-
-		for label, infos := range anmIndexes {
-			if len(infos) > 1 {
-				continue
-			}
-			s.AnonymousDominantIndexes[label] = infos[0].Clone().UnshiftIndex(field.Indexes)
+	}
+	// 将所有匿名字段放入当前字段的AnonymousDominantIndexes里，如果有多个，则都忽略
+	for label, infos := range anmIndexes {
+		if len(infos) > 1 {
+			continue
 		}
-		for label, infos := range anmDominantIndexes {
-			if len(infos) > 1 {
-				continue
-			}
-			s.AnonymousDominantIndexes[label] = infos[0].Clone().UnshiftIndex(field.Indexes)
+		s.AnonymousDominantIndexes[label] = infos[0]
+	}
+	for label, infos := range anmDominantIndexes {
+		if len(infos) > 1 {
+			continue
 		}
+		s.AnonymousDominantIndexes[label] = infos[0]
 	}
 }
 

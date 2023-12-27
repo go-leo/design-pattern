@@ -1102,6 +1102,67 @@ func TestSameLabel(t *testing.T) {
 	}, tgt)
 }
 
+type testSameLabelNestedC struct {
+	A int
+	B int
+	C int
+}
+
+type testSameLabelNestedA struct {
+	A int
+	B int
+}
+
+type testSameLabelNestedB struct {
+	testSameLabelNestedC
+	A int
+	B int
+}
+
+type testSameLabelParent struct {
+	testSameLabelNestedA
+	testSameLabelNestedB
+	A int
+}
+
+func TestSameLabelNested(t *testing.T) {
+	src := testSameLabelParent{
+		testSameLabelNestedA: testSameLabelNestedA{
+			A: 2,
+			B: 3,
+		},
+		testSameLabelNestedB: testSameLabelNestedB{
+			testSameLabelNestedC: testSameLabelNestedC{
+				A: 6,
+				B: 7,
+				C: 8,
+			},
+			A: 4,
+			B: 5,
+		},
+		A: 1,
+	}
+	var tgt testSameLabelParent
+	err := prototype.Clone(&tgt, src)
+	assert.NoError(t, err)
+	assert.EqualValues(t, testSameLabelParent{
+		testSameLabelNestedA: testSameLabelNestedA{
+			A: 2,
+			B: 3,
+		},
+		testSameLabelNestedB: testSameLabelNestedB{
+			testSameLabelNestedC: testSameLabelNestedC{
+				A: 6,
+				B: 7,
+				C: 8,
+			},
+			A: 4,
+			B: 5,
+		},
+		A: 1,
+	}, tgt)
+}
+
 type unexportedPtrFieldNested struct {
 	A string
 }
