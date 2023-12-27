@@ -1077,6 +1077,31 @@ func TestGetterSetterCloner(t *testing.T) {
 	}, tgt)
 }
 
+type testSameLabel struct {
+	A    int
+	AA   int `prototype:"A"`
+	AAA  int `prototype:"A"`
+	AAAA int `prototype:"-"`
+}
+
+func TestSameLabel(t *testing.T) {
+	src := testSameLabel{
+		A:    10,
+		AA:   20,
+		AAA:  30,
+		AAAA: 40,
+	}
+	var tgt testSameLabel
+	err := prototype.Clone(&tgt, src, prototype.TagKey("prototype"))
+	assert.NoError(t, err)
+	assert.EqualValues(t, testSameLabel{
+		A:    0,
+		AA:   20,
+		AAA:  0,
+		AAAA: 0,
+	}, tgt)
+}
+
 type unexportedPtrFieldNested struct {
 	A string
 }

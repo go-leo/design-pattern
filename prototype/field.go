@@ -422,7 +422,13 @@ func (s *structInfo) AnalysisField(field *fieldInfo, opts *options) {
 	if field.IsIgnore {
 		return
 	}
+	// 如果相同label的字段，保留有tag的字段，如果tag一样，保留index小的字段（即先来的字段）
+	f, ok := s.FieldIndexes[field.Label]
+	if ok && ((f.WithTag && !field.WithTag) || (f.WithTag == field.WithTag)) {
+		return
+	}
 	s.FieldIndexes[field.Label] = field
+
 	if !field.Anonymous {
 		return
 	}
