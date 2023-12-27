@@ -958,9 +958,9 @@ func setStructToAny(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value,
 	m := make(map[any]any)
 	srcType := srcVal.Type()
 	srcStruct := cachedStruct(srcType, opts)
-	err := srcStruct.rangeFields(func(label string, field *fieldInfo) error {
+	err := srcStruct.RangeFields(func(label string, field *fieldInfo) error {
 		var tgtEntryVal any
-		srcFieldVal, ok := field.findGettableValue(srcVal)
+		srcFieldVal, ok := field.FindGettableValue(srcVal)
 		if !ok {
 			return nil
 		}
@@ -993,10 +993,10 @@ func setStructToMap(e *cloneContext, fks []string, tgtVal, srcVal reflect.Value,
 
 	srcType := srcVal.Type()
 	srcStruct := cachedStruct(srcType, opts)
-	err := srcStruct.rangeFields(func(label string, field *fieldInfo) error {
+	err := srcStruct.RangeFields(func(label string, field *fieldInfo) error {
 		entryFullKeys := append(slices.Clone(fks), label)
 
-		srcFieldVal, ok := field.findGettableValue(srcVal)
+		srcFieldVal, ok := field.FindGettableValue(srcVal)
 		if !ok {
 			return nil
 		}
@@ -1078,20 +1078,20 @@ func setStructToStruct(e *cloneContext, fks []string, tgtVal, srcVal reflect.Val
 }
 
 func getValueFromField(_ *cloneContext, _ []string, _ reflect.Value, srcVal reflect.Value, opts *options, srcStruct *structInfo, label string) (reflect.Value, bool) {
-	srcField, ok := srcStruct.findField(label, opts)
+	srcField, ok := srcStruct.FindField(label, opts)
 	if !ok {
 		return reflect.Value{}, false
 	}
-	value, ok := srcField.findGettableValue(srcVal)
+	value, ok := srcField.FindGettableValue(srcVal)
 	return value, ok
 }
 
 func getValueFromGetter(_ *cloneContext, _ []string, _ reflect.Value, srcVal reflect.Value, opts *options, srcStruct *structInfo, label string) (reflect.Value, bool, error) {
-	getter, ok := srcStruct.findGetter(label, srcVal, opts)
+	method, getter, ok := srcStruct.FindGetter(label, srcVal, opts)
 	if !ok {
 		return reflect.Value{}, false, nil
 	}
-	outVal, err := srcStruct.invokeGetter(getter)
+	outVal, err := method.InvokeGetter(getter)
 	if err != nil {
 		return reflect.Value{}, true, err
 	}
@@ -1099,11 +1099,11 @@ func getValueFromGetter(_ *cloneContext, _ []string, _ reflect.Value, srcVal ref
 }
 
 func setValueToField(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tgtStruct *structInfo, label string, srcValCloner clonerFunc) (bool, error) {
-	tgtField, ok := tgtStruct.findField(label, opts)
+	tgtField, ok := tgtStruct.FindField(label, opts)
 	if !ok {
 		return false, nil
 	}
-	tgtFieldValue, ok := tgtField.findSettableValue(tgtVal)
+	tgtFieldValue, ok := tgtField.FindSettableValue(tgtVal)
 	if !ok {
 		return false, nil
 	}
@@ -1114,7 +1114,7 @@ func setValueToField(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal
 }
 
 func setValueToSetter(e *cloneContext, fks []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tgtStruct *structInfo, label string, srcValCloner clonerFunc) (bool, error) {
-	setter, ok := tgtStruct.findSetter(label, tgtVal, opts)
+	method, setter, ok := tgtStruct.FindSetter(label, tgtVal, opts)
 	if !ok {
 		return false, nil
 	}
@@ -1122,7 +1122,7 @@ func setValueToSetter(e *cloneContext, fks []string, tgtVal reflect.Value, srcVa
 	if err := srcValCloner(e, fks, inVal, srcVal, opts); err != nil {
 		return true, err
 	}
-	if err := tgtStruct.invokeSetter(inVal, setter); err != nil {
+	if err := method.InvokeSetter(inVal, setter); err != nil {
 		return true, err
 	}
 	return true, nil
