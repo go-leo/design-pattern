@@ -1034,7 +1034,12 @@ func setStructToStruct(e *cloneContext, fks []string, tgtVal, srcVal reflect.Val
 	tgtType := tgtVal.Type()
 	tgtStruct := cachedStruct(tgtType, opts)
 
-	labels := maps.Keys(mapx.Append(mapx.KeySet(srcStruct.FieldIndexes), mapx.KeySet(tgtStruct.FieldIndexes)))
+	labels := maps.Keys(mapx.Append(
+		mapx.KeySet(srcStruct.FieldIndexes),
+		mapx.KeySet(tgtStruct.FieldIndexes),
+		mapx.KeySet(srcStruct.AnonymousDominantIndexes),
+		mapx.KeySet(tgtStruct.AnonymousDominantIndexes),
+	))
 
 	for _, label := range labels {
 		entryFullKeys := append(slices.Clone(fks), label)
