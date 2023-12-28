@@ -164,9 +164,6 @@ func typeFields(t reflect.Type, opts *options) jstructFields {
 	// 对字段进行排序，首先按照名称排序，然后按照字段索引长度排序，最后按照是否有标签排序。
 	sort.Slice(fields, func(i, j int) bool {
 		x := fields
-		if x[i].name != x[j].name {
-			return x[i].name < x[j].name
-		}
 		if len(x[i].index) != len(x[j].index) {
 			return len(x[i].index) < len(x[j].index)
 		}
@@ -415,17 +412,16 @@ func (s *structInfo) AnalysisAnonymous(opts *options) {
 			anmDominantIndexes[label] = append(anmDominantIndexes[label], anmField.Clone().UnshiftIndex(field.Indexes))
 		}
 	}
-	// 将所有匿名字段放入当前字段的AnonymousDominantIndexes里，如果有多个，则都忽略
+	// 将所有匿名字段放入当前字段的AnonymousDominantIndexes里
+	// 优先深度浅的
+	// 其次优先有标签的
+	// 在其次index小的
 	for label, infos := range anmIndexes {
-		if len(infos) > 1 {
-			continue
-		}
+		slices.SortFunc(infos, fieldInfoLess)
 		s.AnonymousDominantIndexes[label] = infos[0]
 	}
 	for label, infos := range anmDominantIndexes {
-		if len(infos) > 1 {
-			continue
-		}
+		slices.SortFunc(infos, fieldInfoLess)
 		s.AnonymousDominantIndexes[label] = infos[0]
 	}
 }
@@ -538,6 +534,22 @@ type fieldInfo struct {
 	Label    string
 	Options  []string
 	IsIgnore bool
+}
+
+func fieldInfoLess(a, b *fieldInfo) bool {
+	if len(a.Indexes) != len(b.Indexes) {
+		return len(a.Indexes) < len(b.Indexes)
+	}
+	if a.WithTag != b.WithTag {
+		return a.WithTag
+	}
+	for i, aIndex := range a.Indexes {
+		bIndex := b.Indexes[i]
+		if aIndex != bIndex {
+			return aIndex < bIndex
+		}
+	}
+	return false
 }
 
 func (f *fieldInfo) Analysis(opts *options) *fieldInfo {

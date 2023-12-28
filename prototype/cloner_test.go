@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -1142,6 +1143,7 @@ func TestSameLabelNested(t *testing.T) {
 		},
 		A: 1,
 	}
+
 	var tgt testSameLabelParent
 	err := prototype.Clone(&tgt, src)
 	assert.NoError(t, err)
@@ -1212,4 +1214,12 @@ func TestNested(t *testing.T) {
 		toPtrVal.Method(toPtrType.Method(i).Index).Call([]reflect.Value{})
 	}
 
+}
+
+func TestSort(t *testing.T) {
+	a := []int{1, 2, 3, 4, 5, 6}
+	slices.SortFunc(a, func(a, b int) bool {
+		return a < b
+	})
+	t.Log(a)
 }
