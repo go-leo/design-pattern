@@ -40,7 +40,7 @@ func stringify(v reflect.Value) (string, error) {
 	}
 }
 
-func indirectValue(v reflect.Value) (ClonerFrom, reflect.Value) {
+func indirect(v reflect.Value) (ClonerFrom, reflect.Value) {
 	for {
 		if v.Type().NumMethod() > 0 && v.CanInterface() {
 			if c, ok := v.Interface().(ClonerFrom); ok {
@@ -58,6 +58,13 @@ func indirectValue(v reflect.Value) (ClonerFrom, reflect.Value) {
 
 func indirectType(t reflect.Type) reflect.Type {
 	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t
+}
+
+func indirectValue(t reflect.Value) reflect.Value {
+	for t.Kind() == reflect.Pointer || t.Kind() == reflect.Interface {
 		t = t.Elem()
 	}
 	return t

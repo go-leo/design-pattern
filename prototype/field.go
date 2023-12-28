@@ -717,3 +717,46 @@ func cachedStruct(t reflect.Type, opts *options) *structInfo {
 	f, _ := fieldCache.LoadOrStore(t, newStructInfo(t).Analysis(opts))
 	return f.(*structInfo)
 }
+
+type mapEntry struct {
+	KeyVal  reflect.Value
+	Label   string
+	ValVal  reflect.Value
+	ValType reflect.Type
+}
+
+type mapEntries []mapEntry
+
+func (l mapEntries) Sort() {
+	slices.SortFunc(l, func(a, b mapEntry) bool {
+		if a.ValType.Kind() != b.ValType.Kind() {
+			if a.ValType.Kind() == reflect.Struct || a.ValType.Kind() == reflect.Map {
+				return false
+			}
+		}
+		return strings.Compare(a.Label, b.Label) < 0
+	})
+}
+
+func newMapEntries(srcMapIter *reflect.MapIter) (mapEntries, error) {
+	entries := make(mapEntries, 0)
+	for srcMapIter.Next() {
+		valVal := srcMapIter.Value()
+		if !valVal.IsValid() || valVal.IsNil() {
+			continue
+		}
+		keyVal := srcMapIter.Key()
+		label, err := stringify(keyVal)
+		if err != nil {
+			return nil, newStringifyError(keyVal.Type(), err)
+		}
+		entries = append(entries, mapEntry{
+			KeyVal:  keyVal,
+			Label:   label,
+			ValVal:  valVal,
+			ValType: indirectValue(valVal).Type(),
+		})
+	}
+	entries.Sort()
+	return entries, nil
+}

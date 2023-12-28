@@ -121,7 +121,7 @@ func boolCloner(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, 
 		return nil
 	}
 	b := srcVal.Bool()
-	cloner, tv := indirectValue(tgtVal)
+	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
 		return cloner.CloneFrom(b)
 	}
@@ -166,7 +166,7 @@ func intCloner(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, o
 		return nil
 	}
 	i := srcVal.Int()
-	cloner, tv := indirectValue(tgtVal)
+	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
 		return cloner.CloneFrom(i)
 	}
@@ -211,7 +211,7 @@ func uintCloner(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, 
 		return nil
 	}
 	u := srcVal.Uint()
-	cloner, tv := indirectValue(tgtVal)
+	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
 		return cloner.CloneFrom(u)
 	}
@@ -256,7 +256,7 @@ func floatCloner(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value,
 		return nil
 	}
 	f := srcVal.Float()
-	cloner, tv := indirectValue(tgtVal)
+	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
 		return cloner.CloneFrom(f)
 	}
@@ -302,7 +302,7 @@ func stringCloner(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value
 		return nil
 	}
 	s := srcVal.String()
-	cloner, tv := indirectValue(tgtVal)
+	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
 		return cloner.CloneFrom(s)
 	}
@@ -377,7 +377,7 @@ func bytesCloner(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value,
 		return nil
 	}
 	bs := srcVal.Bytes()
-	cloner, tv := indirectValue(tgtVal)
+	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
 		return cloner.CloneFrom(bs)
 	}
@@ -455,7 +455,7 @@ func timeCloner(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, 
 		return nil
 	}
 	t := srcVal.Interface().(time.Time)
-	cloner, tv := indirectValue(tgtVal)
+	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
 		return cloner.CloneFrom(t)
 	}
@@ -558,7 +558,7 @@ func arrayCloner(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value,
 	if !tgtVal.IsValid() {
 		return nil
 	}
-	cloner, tv := indirectValue(tgtVal)
+	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
 		return cloner.CloneFrom(srcVal.Interface())
 	}
@@ -586,7 +586,7 @@ func mapCloner(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, o
 }
 
 func _mapCloner(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	cloner, tv := indirectValue(tgtVal)
+	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
 		return cloner.CloneFrom(srcVal.Interface())
 	}
@@ -708,7 +708,7 @@ func structCloner(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value
 		return sliceCloner(e, labels, tgtVal, reflect.ValueOf(listPB.ListValue.AsSlice()), opts)
 
 	default:
-		cloner, tv := indirectValue(tgtVal)
+		cloner, tv := indirect(tgtVal)
 		if cloner != nil {
 			return cloner.CloneFrom(srcVal.Interface())
 		}

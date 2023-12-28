@@ -846,20 +846,17 @@ func setMapToMap(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal 
 	srcValType := srcType.Elem()
 	srcKeyCloner := typeCloner(srcKeyType, true, opts)
 	srcValCloner := typeCloner(srcValType, true, opts)
+	srcEntries, err := newMapEntries(srcVal.MapRange())
+	if err != nil {
+		return err
+	}
 
 	tgtKeyType := tgtType.Key()
 	tgtValType := tgtType.Elem()
 
-	srcMapIter := srcVal.MapRange()
-	for srcMapIter.Next() {
-		srcEntryKeyVal := srcMapIter.Key()
-		label, err := stringify(srcEntryKeyVal)
-		if err != nil {
-			return newStringifyError(srcEntryKeyVal.Type(), err)
-		}
-
+	for _, srcEntry := range srcEntries {
 		tgtEntryKeyVal := reflect.New(tgtKeyType)
-		if err := srcKeyCloner(e, append(slices.Clone(labels), label), tgtEntryKeyVal, srcEntryKeyVal, opts); err != nil {
+		if err := srcKeyCloner(e, append(slices.Clone(labels), srcEntry.Label), tgtEntryKeyVal, srcEntry.KeyVal, opts); err != nil {
 			return err
 		}
 		tgtEntryKeyVal = tgtEntryKeyVal.Elem()
@@ -867,9 +864,8 @@ func setMapToMap(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal 
 			continue
 		}
 
-		srcEntryValVal := srcMapIter.Value()
 		tgtEntryValVal := reflect.New(tgtValType)
-		if err := srcValCloner(e, append(slices.Clone(labels), label), tgtEntryValVal, srcEntryValVal, opts); err != nil {
+		if err := srcValCloner(e, append(slices.Clone(labels), srcEntry.Label), tgtEntryValVal, srcEntry.ValVal, opts); err != nil {
 			return err
 		}
 		tgtEntryValVal = tgtEntryValVal.Elem()
@@ -878,6 +874,7 @@ func setMapToMap(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal 
 		}
 		tgtVal.SetMapIndex(tgtEntryKeyVal, tgtEntryValVal)
 	}
+
 	return nil
 }
 
@@ -893,23 +890,20 @@ func setMapToAny(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal 
 	srcValCloner := typeCloner(srcValType, true, opts)
 
 	m := make(map[any]any)
-	srcMapIter := srcVal.MapRange()
-	for srcMapIter.Next() {
-		srcEntryKeyVal := srcMapIter.Key()
-		label, err := stringify(srcEntryKeyVal)
-		if err != nil {
-			return newStringifyError(srcEntryKeyVal.Type(), err)
-		}
-		entryFullKeys := append(slices.Clone(labels), label)
+	srcEntries, err := newMapEntries(srcVal.MapRange())
+	if err != nil {
+		return err
+	}
+	for _, srcEntry := range srcEntries {
+		entryFullKeys := append(slices.Clone(labels), srcEntry.Label)
 
 		var tgtEntryKey any
-		if err := srcKeyCloner(e, entryFullKeys, reflect.ValueOf(&tgtEntryKey), srcEntryKeyVal, opts); err != nil {
+		if err := srcKeyCloner(e, entryFullKeys, reflect.ValueOf(&tgtEntryKey), srcEntry.KeyVal, opts); err != nil {
 			return err
 		}
 
-		srcEntryValVal := srcMapIter.Value()
 		var tgtEntryVal any
-		if err := srcValCloner(e, entryFullKeys, reflect.ValueOf(&tgtEntryVal), srcEntryValVal, opts); err != nil {
+		if err := srcValCloner(e, entryFullKeys, reflect.ValueOf(&tgtEntryVal), srcEntry.ValVal, opts); err != nil {
 			return err
 		}
 		m[tgtEntryKey] = tgtEntryVal
@@ -920,19 +914,16 @@ func setMapToAny(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal 
 
 func setMapToStruct(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	srcValCloner := typeCloner(srcVal.Type().Elem(), true, opts)
+	srcEntries, err := newMapEntries(srcVal.MapRange())
+	if err != nil {
+		return err
+	}
 
 	tgtStruct := cachedStruct(tgtVal.Type(), opts)
 
-	srcMapIter := srcVal.MapRange()
-	for srcMapIter.Next() {
-		srcEntryKeyVal := srcMapIter.Key()
-		label, err := stringify(srcEntryKeyVal)
-		if err != nil {
-			return newStringifyError(srcEntryKeyVal.Type(), err)
-		}
-		entryFullKeys := append(slices.Clone(labels), label)
-
-		ok, err := setValueToField(e, entryFullKeys, tgtVal, srcMapIter.Value(), opts, tgtStruct, label, srcValCloner)
+	for _, srcEntry := range srcEntries {
+		entryFullKeys := append(slices.Clone(labels), srcEntry.Label)
+		ok, err := setValueToField(e, entryFullKeys, tgtVal, srcEntry.ValVal, opts, tgtStruct, srcEntry.Label, srcValCloner)
 		if err != nil {
 			return err
 		}
@@ -940,7 +931,7 @@ func setMapToStruct(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 			continue
 		}
 		// 方法克隆
-		ok, err = setValueToSetter(e, entryFullKeys, tgtVal, srcMapIter.Value(), opts, tgtStruct, label, srcValCloner)
+		ok, err = setValueToSetter(e, entryFullKeys, tgtVal, srcEntry.ValVal, opts, tgtStruct, srcEntry.Label, srcValCloner)
 		if err != nil {
 			return err
 		}

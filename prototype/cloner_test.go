@@ -798,6 +798,7 @@ func TestMapCloner(t *testing.T) {
 			"TRUE": true,
 			23.4:   []int{2, 3, 4},
 		},
+		"nil": nil,
 	}
 	var tgtMap map[string]any
 	err = prototype.Clone(&tgtMap, srcMap)
@@ -1219,7 +1220,7 @@ func TestNested(t *testing.T) {
 func TestSort(t *testing.T) {
 	a := []int{1, 2, 3, 4, 5, 6}
 	slices.SortFunc(a, func(a, b int) bool {
-		return a < b
+		return true
 	})
 	t.Log(a)
 }
