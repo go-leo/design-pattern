@@ -3,7 +3,6 @@ package prototype_test
 import (
 	"database/sql"
 	"encoding/base64"
-	"fmt"
 	"github.com/go-leo/design-pattern/prototype"
 	"github.com/go-leo/gox/errorx"
 	"github.com/google/uuid"
@@ -16,7 +15,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	"math"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -1171,59 +1169,105 @@ func TestSameLabelNested(t *testing.T) {
 	}, tgt)
 }
 
-type unexportedPtrFieldNested struct {
-	A string
+type testGetSetterNestedA struct {
+	a string `prototype:"a"`
 }
 
-func (a unexportedPtrFieldNested) PrintA() {
-	fmt.Println("PrintA:" + a.A)
+func (n testGetSetterNestedA) A() string {
+	return n.a
 }
 
-func (a *unexportedPtrFieldNested) PrintB() {
-	fmt.Println("PrintB:" + a.A)
+func (n *testGetSetterNestedA) SetA(a string) {
+	n.a = a
 }
 
-type unexportedPtrFieldParentA struct {
-	*unexportedPtrFieldNested
-}
-type unexportedPtrFieldParentB struct {
-	*unexportedPtrFieldNested
+type testGetSetterNestedB struct {
+	b string `prototype:"b"`
 }
 
-func TestNested(t *testing.T) {
-	from := unexportedPtrFieldParentA{unexportedPtrFieldNested: &unexportedPtrFieldNested{A: "a"}}
-	to := unexportedPtrFieldParentB{}
+func (t testGetSetterNestedB) B() string {
+	return t.b
+}
 
-	fromType := reflect.TypeOf(from)
-	fromVal := reflect.ValueOf(from)
-	for i := 0; i < fromType.NumMethod(); i++ {
-		fmt.Println("fromType", fromType.Method(i))
-		fromVal.Method(fromType.Method(i).Index).Call([]reflect.Value{})
+func (t *testGetSetterNestedB) SetB(b string) {
+	t.b = b
+}
+
+type testGetSetterParent struct {
+	testGetSetterNestedA
+	*testGetSetterNestedB
+}
+
+func (p testGetSetterParent) A() string {
+	return p.testGetSetterNestedA.a
+}
+
+func (p *testGetSetterParent) SetA(a string) {
+	p.testGetSetterNestedA.a = a
+}
+
+func TestNestedGetSetter(t *testing.T) {
+	src := testGetSetterParent{
+		testGetSetterNestedA: testGetSetterNestedA{
+			a: "a",
+		},
+		testGetSetterNestedB: &testGetSetterNestedB{
+			b: "b",
+		},
 	}
-	fromPtrType := reflect.TypeOf(&from)
-	fromPtrVal := reflect.ValueOf(&from)
-	for i := 0; i < fromPtrType.NumMethod(); i++ {
-		fmt.Println("fromPtrType", fromPtrType.Method(i))
-		fromPtrVal.Method(fromPtrType.Method(i).Index).Call([]reflect.Value{})
-	}
+	tgt := testGetSetterParent{}
+	err := prototype.Clone(&tgt, src, prototype.TagKey("prototype"), prototype.SetterPrefix("Set"), prototype.SetterPrefix("Set"))
+	var e prototype.Error
+	assert.ErrorAs(t, err, &e)
 
-	toType := reflect.TypeOf(to)
-	toVal := reflect.ValueOf(to)
-	for i := 0; i < toType.NumMethod(); i++ {
-		fmt.Println("toType", toType.Method(i))
-		if false {
-			toVal.Method(toType.Method(i).Index).Call([]reflect.Value{})
-		}
-
-	}
-	toPtrType := reflect.TypeOf(&to)
-	toPtrVal := reflect.ValueOf(&to)
-	for i := 0; i < toPtrType.NumMethod(); i++ {
-		fmt.Println("toPtrType", toPtrType.Method(i))
-		toPtrVal.Method(toPtrType.Method(i).Index).Call([]reflect.Value{})
-	}
-
+	tgt = testGetSetterParent{testGetSetterNestedB: new(testGetSetterNestedB)}
+	err = prototype.Clone(&tgt, src, prototype.TagKey("prototype"), prototype.SetterPrefix("Set"), prototype.SetterPrefix("Set"))
+	assert.NoError(t, err)
+	assert.EqualValues(t, testGetSetterParent{
+		testGetSetterNestedA: testGetSetterNestedA{
+			a: "a",
+		},
+		testGetSetterNestedB: &testGetSetterNestedB{
+			b: "b",
+		},
+	}, tgt)
 }
+
+//
+//func TestNestedGetSetter(t *testing.T) {
+//	from := unexportedPtrFieldParentA{testGetSetterNestedA: &testGetSetterNestedA{A: "a"}}
+//	to := unexportedPtrFieldParentB{}
+//
+//	fromType := reflect.TypeOf(from)
+//	fromVal := reflect.ValueOf(from)
+//	for i := 0; i < fromType.NumMethod(); i++ {
+//		fmt.Println("fromType", fromType.Method(i))
+//		fromVal.Method(fromType.Method(i).Index).Call([]reflect.Value{})
+//	}
+//	fromPtrType := reflect.TypeOf(&from)
+//	fromPtrVal := reflect.ValueOf(&from)
+//	for i := 0; i < fromPtrType.NumMethod(); i++ {
+//		fmt.Println("fromPtrType", fromPtrType.Method(i))
+//		fromPtrVal.Method(fromPtrType.Method(i).Index).Call([]reflect.Value{})
+//	}
+//
+//	toType := reflect.TypeOf(to)
+//	toVal := reflect.ValueOf(to)
+//	for i := 0; i < toType.NumMethod(); i++ {
+//		fmt.Println("toType", toType.Method(i))
+//		if false {
+//			toVal.Method(toType.Method(i).Index).Call([]reflect.Value{})
+//		}
+//
+//	}
+//	toPtrType := reflect.TypeOf(&to)
+//	toPtrVal := reflect.ValueOf(&to)
+//	for i := 0; i < toPtrType.NumMethod(); i++ {
+//		fmt.Println("toPtrType", toPtrType.Method(i))
+//		toPtrVal.Method(toPtrType.Method(i).Index).Call([]reflect.Value{})
+//	}
+//
+//}
 
 func TestSort(t *testing.T) {
 	a := []int{1, 2, 3, 4, 5, 6}

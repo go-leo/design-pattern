@@ -322,24 +322,32 @@ func (s *structInfo) AnalysisFields(opts *options) {
 	// 字段分析
 	for i := 0; i < s.Type.NumField(); i++ {
 		field := &fieldInfo{StructField: s.Type.Field(i)}
-		// 导出(非匿名或匿名)字段，可以分析
+		field.Analysis(opts)
+
+		// 忽略字段
+		if field.IsIgnore {
+			continue
+		}
+
+		// 有tag的字段
+		if field.WithTag {
+			s.FieldIndexes[field.Label] = append(s.FieldIndexes[field.Label], field)
+		}
+
+		// 导出字段:
+		// 所有导出(包括非匿名和匿名)字段
 		if field.IsExported() {
-			s.AnalysisField(field, opts)
+			s.FieldIndexes[field.Label] = append(s.FieldIndexes[field.Label], field)
 			continue
 		}
 
-		// 非导出、非匿名字段，忽略
-		if !field.Anonymous {
-			continue
-		}
-
-		// 非导出，匿名结构体字段或者匿名结构体指针字段, 可以分析
+		// 非导出字段：
+		// 非导出、匿名结构体字段或者匿名结构体指针字段,
 		if field.Type.Kind() == reflect.Struct ||
 			field.Type.Kind() == reflect.Pointer && field.Type.Elem().Kind() == reflect.Struct {
-			s.AnalysisField(field, opts)
+			s.FieldIndexes[field.Label] = append(s.FieldIndexes[field.Label], field)
 			continue
 		}
-		// 其他非导出的字段，忽略
 	}
 }
 
@@ -375,7 +383,6 @@ func (s *structInfo) AnalysisAllFields(opts *options) {
 			}
 
 			// 匿名字段
-
 			var anmStruct *structInfo
 			if field.Type.Kind() == reflect.Struct {
 				anmStruct = cachedStruct(field.Type, opts)
@@ -411,11 +418,7 @@ func (s *structInfo) SortFields(opts *options) {
 }
 
 func (s *structInfo) AnalysisField(field *fieldInfo, opts *options) {
-	field.Analysis(opts)
-	if field.IsIgnore {
-		return
-	}
-	s.FieldIndexes[field.Label] = append(s.FieldIndexes[field.Label], field)
+
 }
 
 func (s *structInfo) FindField(label string, field *fieldInfo, opts *options) (*fieldInfo, bool) {
@@ -517,8 +520,8 @@ func (s *structInfo) FindSetter(label string, v reflect.Value, opts *options) (*
 	var method *methodInfo
 	var ok bool
 	if v.CanAddr() {
-		method, ok = s.FindMethod(label, opts, s.PointerMethodIndexes)
 		v = v.Addr()
+		method, ok = s.FindMethod(label, opts, s.PointerMethodIndexes)
 	} else {
 		method, ok = s.FindMethod(label, opts, s.StructMethodIndexes)
 	}

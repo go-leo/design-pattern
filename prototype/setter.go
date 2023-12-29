@@ -921,20 +921,9 @@ func setMapToStruct(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 
 	for _, srcEntry := range srcEntries {
 		entryLabels := append(slices.Clone(labels), srcEntry.Label)
-		ok, err := setValueToField(e, entryLabels, tgtVal, srcEntry.ValVal, opts, tgtStruct, srcEntry.Label, nil, srcValCloner)
+		_, err := setValue(e, entryLabels, tgtVal, srcEntry.ValVal, opts, tgtStruct, srcEntry.Label, nil, srcValCloner)
 		if err != nil {
 			return err
-		}
-		if ok {
-			continue
-		}
-		// 方法克隆
-		ok, err = setValueToSetter(e, entryLabels, tgtVal, srcEntry.ValVal, opts, tgtStruct, srcEntry.Label, srcValCloner)
-		if err != nil {
-			return err
-		}
-		if ok {
-			continue
 		}
 	}
 	return nil
@@ -1047,21 +1036,8 @@ func setStructToStruct(e *cloneContext, labels []string, tgtVal, srcVal reflect.
 				cloner = valueCloner(srcFieldVal, opts)
 			}
 
-			// 将 source field value 设置到 target field
-			ok, err = setValueToField(e, entryLabels, tgtVal, srcFieldVal, opts, tgtStruct, label, field, cloner)
-			if err != nil {
+			if _, err = setValue(e, entryLabels, tgtVal, srcFieldVal, opts, tgtStruct, label, field, cloner); err != nil {
 				return err
-			}
-			if ok {
-				continue
-			}
-			// 上面失败，则将 source field value 设置到 target setter
-			ok, err = setValueToSetter(e, entryLabels, tgtVal, srcFieldVal, opts, tgtStruct, label, cloner)
-			if err != nil {
-				return err
-			}
-			if ok {
-				continue
 			}
 		}
 	}
@@ -1090,17 +1066,28 @@ func getValueFromGetter(_ *cloneContext, _ []string, _ reflect.Value, srcVal ref
 	return outVal, true, nil
 }
 
-func setValueToField(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options,
-	tgtStruct *structInfo, fieldLabel string, field *fieldInfo, srcValCloner clonerFunc) (bool, error) {
+func setValue(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options,
+	tgtStruct *structInfo, fieldLabel string, field *fieldInfo, cloner clonerFunc) (bool, error) {
+	// 基于label查找目标字段
 	tgtField, ok := tgtStruct.FindField(fieldLabel, field, opts)
 	if !ok {
-		return false, nil
+		// 如果目标字段找不到，需要用setter设值
+		return setValueToSetter(e, labels, tgtVal, srcVal, opts, tgtStruct, fieldLabel, cloner)
 	}
+	// 获取目标字段value
 	tgtFieldValue, ok := tgtField.FindSettableValue(tgtVal)
 	if !ok {
-		return false, nil
+		// 找不到可以设置的value，返回错误
+		return true, newSetEmbeddedPointerError(labels, tgtFieldValue.Type())
 	}
-	if err := srcValCloner(e, labels, tgtFieldValue, srcVal, opts); err != nil {
+
+	// 如果字段是非导出的，需要用setter设值
+	if !tgtField.IsExported() {
+		return setValueToSetter(e, labels, tgtVal, srcVal, opts, tgtStruct, fieldLabel, cloner)
+	}
+
+	// 克隆值
+	if err := cloner(e, labels, tgtFieldValue, srcVal, opts); err != nil {
 		return true, err
 	}
 	return true, nil
