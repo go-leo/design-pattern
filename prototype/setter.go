@@ -1074,7 +1074,7 @@ func setValue(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal ref
 		// 如果目标字段找不到，需要用setter设值
 		return setValueToSetter(e, labels, tgtVal, srcVal, opts, tgtStruct, fieldLabel, cloner)
 	}
-	// 获取目标字段value
+	// 获取目标字段value，确保直通field
 	tgtFieldValue, ok := tgtField.FindSettableValue(tgtVal)
 	if !ok {
 		// 找不到可以设置的value，返回错误

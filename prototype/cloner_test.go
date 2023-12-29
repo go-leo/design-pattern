@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -1169,110 +1168,75 @@ func TestSameLabelNested(t *testing.T) {
 	}, tgt)
 }
 
-type testGetSetterNestedA struct {
-	a string `prototype:"a"`
+type testGetterStructParent struct {
+	testGetter
 }
 
-func (n testGetSetterNestedA) A() string {
-	return n.a
+type testSetterStructParent struct {
+	testSetter
 }
 
-func (n *testGetSetterNestedA) SetA(a string) {
-	n.a = a
-}
-
-type testGetSetterNestedB struct {
-	b string `prototype:"b"`
-}
-
-func (t testGetSetterNestedB) B() string {
-	return t.b
-}
-
-func (t *testGetSetterNestedB) SetB(b string) {
-	t.b = b
-}
-
-type testGetSetterParent struct {
-	testGetSetterNestedA
-	*testGetSetterNestedB
-}
-
-func (p testGetSetterParent) A() string {
-	return p.testGetSetterNestedA.a
-}
-
-func (p *testGetSetterParent) SetA(a string) {
-	p.testGetSetterNestedA.a = a
-}
-
-func TestNestedGetSetter(t *testing.T) {
-	src := testGetSetterParent{
-		testGetSetterNestedA: testGetSetterNestedA{
-			a: "a",
-		},
-		testGetSetterNestedB: &testGetSetterNestedB{
-			b: "b",
+func TestNestedGetSetterStruct(t *testing.T) {
+	id := uuid.NewString()
+	name := "prototype"
+	age := 30
+	address := "shanghai"
+	src := testGetterStructParent{
+		testGetter: testGetter{
+			id:      id,
+			name:    name,
+			Age:     age,
+			Address: address,
 		},
 	}
-	tgt := testGetSetterParent{}
-	err := prototype.Clone(&tgt, src, prototype.TagKey("prototype"), prototype.SetterPrefix("Set"), prototype.SetterPrefix("Set"))
-	var e prototype.Error
-	assert.ErrorAs(t, err, &e)
-
-	tgt = testGetSetterParent{testGetSetterNestedB: new(testGetSetterNestedB)}
-	err = prototype.Clone(&tgt, src, prototype.TagKey("prototype"), prototype.SetterPrefix("Set"), prototype.SetterPrefix("Set"))
+	var tgt testSetterStructParent
+	err := prototype.Clone(&tgt, src, prototype.TagKey("prototype"), prototype.SetterPrefix("Set"))
 	assert.NoError(t, err)
-	assert.EqualValues(t, testGetSetterParent{
-		testGetSetterNestedA: testGetSetterNestedA{
-			a: "a",
-		},
-		testGetSetterNestedB: &testGetSetterNestedB{
-			b: "b",
+	assert.EqualValues(t, testSetterStructParent{
+		testSetter{
+			Id:      "id:" + id,
+			Name:    "name:" + name,
+			age:     age * 2,
+			address: "china-" + address,
 		},
 	}, tgt)
 }
 
-//
-//func TestNestedGetSetter(t *testing.T) {
-//	from := unexportedPtrFieldParentA{testGetSetterNestedA: &testGetSetterNestedA{A: "a"}}
-//	to := unexportedPtrFieldParentB{}
-//
-//	fromType := reflect.TypeOf(from)
-//	fromVal := reflect.ValueOf(from)
-//	for i := 0; i < fromType.NumMethod(); i++ {
-//		fmt.Println("fromType", fromType.Method(i))
-//		fromVal.Method(fromType.Method(i).Index).Call([]reflect.Value{})
-//	}
-//	fromPtrType := reflect.TypeOf(&from)
-//	fromPtrVal := reflect.ValueOf(&from)
-//	for i := 0; i < fromPtrType.NumMethod(); i++ {
-//		fmt.Println("fromPtrType", fromPtrType.Method(i))
-//		fromPtrVal.Method(fromPtrType.Method(i).Index).Call([]reflect.Value{})
-//	}
-//
-//	toType := reflect.TypeOf(to)
-//	toVal := reflect.ValueOf(to)
-//	for i := 0; i < toType.NumMethod(); i++ {
-//		fmt.Println("toType", toType.Method(i))
-//		if false {
-//			toVal.Method(toType.Method(i).Index).Call([]reflect.Value{})
-//		}
-//
-//	}
-//	toPtrType := reflect.TypeOf(&to)
-//	toPtrVal := reflect.ValueOf(&to)
-//	for i := 0; i < toPtrType.NumMethod(); i++ {
-//		fmt.Println("toPtrType", toPtrType.Method(i))
-//		toPtrVal.Method(toPtrType.Method(i).Index).Call([]reflect.Value{})
-//	}
-//
-//}
+type testGetterPointerParent struct {
+	*testGetter
+}
 
-func TestSort(t *testing.T) {
-	a := []int{1, 2, 3, 4, 5, 6}
-	slices.SortFunc(a, func(a, b int) bool {
-		return true
-	})
-	t.Log(a)
+type testSetterPointerParent struct {
+	*testSetter
+}
+
+func TestNestedGetSetterPointer(t *testing.T) {
+	id := uuid.NewString()
+	name := "prototype"
+	age := 30
+	address := "shanghai"
+	src := testGetterPointerParent{
+		testGetter: &testGetter{
+			id:      id,
+			name:    name,
+			Age:     age,
+			Address: address,
+		},
+	}
+	var tgt testSetterPointerParent
+	err := prototype.Clone(&tgt, src, prototype.TagKey("prototype"), prototype.SetterPrefix("Set"))
+	var e prototype.Error
+	assert.ErrorAs(t, err, &e)
+
+	tgt = testSetterPointerParent{testSetter: new(testSetter)}
+	err = prototype.Clone(&tgt, src, prototype.TagKey("prototype"), prototype.SetterPrefix("Set"))
+	assert.NoError(t, err)
+	assert.EqualValues(t, testSetterPointerParent{
+		testSetter: &testSetter{
+			Id:      "id:" + id,
+			Name:    "name:" + name,
+			age:     age * 2,
+			address: "china-" + address,
+		},
+	}, tgt)
 }
