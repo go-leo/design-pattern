@@ -3,9 +3,7 @@ package prototype
 import (
 	"database/sql"
 	"encoding/base64"
-	"github.com/go-leo/gox/mapx"
 	"github.com/go-leo/gox/mathx"
-	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -895,15 +893,15 @@ func setMapToAny(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal 
 		return err
 	}
 	for _, srcEntry := range srcEntries {
-		entryFullKeys := append(slices.Clone(labels), srcEntry.Label)
+		entryLabels := append(slices.Clone(labels), srcEntry.Label)
 
 		var tgtEntryKey any
-		if err := srcKeyCloner(e, entryFullKeys, reflect.ValueOf(&tgtEntryKey), srcEntry.KeyVal, opts); err != nil {
+		if err := srcKeyCloner(e, entryLabels, reflect.ValueOf(&tgtEntryKey), srcEntry.KeyVal, opts); err != nil {
 			return err
 		}
 
 		var tgtEntryVal any
-		if err := srcValCloner(e, entryFullKeys, reflect.ValueOf(&tgtEntryVal), srcEntry.ValVal, opts); err != nil {
+		if err := srcValCloner(e, entryLabels, reflect.ValueOf(&tgtEntryVal), srcEntry.ValVal, opts); err != nil {
 			return err
 		}
 		m[tgtEntryKey] = tgtEntryVal
@@ -922,8 +920,8 @@ func setMapToStruct(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 	tgtStruct := cachedStruct(tgtVal.Type(), opts)
 
 	for _, srcEntry := range srcEntries {
-		entryFullKeys := append(slices.Clone(labels), srcEntry.Label)
-		ok, err := setValueToField(e, entryFullKeys, tgtVal, srcEntry.ValVal, opts, tgtStruct, srcEntry.Label, srcValCloner)
+		entryLabels := append(slices.Clone(labels), srcEntry.Label)
+		ok, err := setValueToField(e, entryLabels, tgtVal, srcEntry.ValVal, opts, tgtStruct, srcEntry.Label, nil, srcValCloner)
 		if err != nil {
 			return err
 		}
@@ -931,7 +929,7 @@ func setMapToStruct(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 			continue
 		}
 		// 方法克隆
-		ok, err = setValueToSetter(e, entryFullKeys, tgtVal, srcEntry.ValVal, opts, tgtStruct, srcEntry.Label, srcValCloner)
+		ok, err = setValueToSetter(e, entryLabels, tgtVal, srcEntry.ValVal, opts, tgtStruct, srcEntry.Label, srcValCloner)
 		if err != nil {
 			return err
 		}
@@ -956,10 +954,10 @@ func setStructToAny(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 			return nil
 		}
 
-		entryFullKeys := append(slices.Clone(labels), label)
+		entryLabels := append(slices.Clone(labels), label)
 
 		cloner := typeCloner(srcFieldVal.Type(), true, opts)
-		err := cloner(e, entryFullKeys, reflect.ValueOf(&tgtEntryVal), srcFieldVal, opts)
+		err := cloner(e, entryLabels, reflect.ValueOf(&tgtEntryVal), srcFieldVal, opts)
 		if err != nil {
 			return err
 		}
@@ -985,7 +983,7 @@ func setStructToMap(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 	srcType := srcVal.Type()
 	srcStruct := cachedStruct(srcType, opts)
 	err := srcStruct.RangeFields(func(label string, field *fieldInfo) error {
-		entryFullKeys := append(slices.Clone(labels), label)
+		entryLabels := append(slices.Clone(labels), label)
 
 		srcFieldVal, ok := field.FindGettableValue(srcVal)
 		if !ok {
@@ -993,7 +991,7 @@ func setStructToMap(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 		}
 
 		tgtEntryKeyVal := reflect.New(tgtKeyType)
-		if err := stringCloner(e, entryFullKeys, tgtEntryKeyVal, reflect.ValueOf(label), opts); err != nil {
+		if err := stringCloner(e, entryLabels, tgtEntryKeyVal, reflect.ValueOf(label), opts); err != nil {
 			return err
 		}
 		tgtEntryKeyVal = tgtEntryKeyVal.Elem()
@@ -1004,7 +1002,7 @@ func setStructToMap(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 		tgtEntryValVal := reflect.New(tgtValType)
 
 		cloner := typeCloner(srcFieldVal.Type(), true, opts)
-		if err := cloner(e, entryFullKeys, tgtEntryValVal, srcFieldVal, opts); err != nil {
+		if err := cloner(e, entryLabels, tgtEntryValVal, srcFieldVal, opts); err != nil {
 			return err
 		}
 		tgtEntryValVal = tgtEntryValVal.Elem()
@@ -1025,56 +1023,54 @@ func setStructToStruct(e *cloneContext, labels []string, tgtVal, srcVal reflect.
 	tgtType := tgtVal.Type()
 	tgtStruct := cachedStruct(tgtType, opts)
 
-	fieldLabels := maps.Keys(mapx.Append(
-		mapx.KeySet(srcStruct.FieldIndexes),
-		mapx.KeySet(tgtStruct.FieldIndexes),
-		mapx.KeySet(srcStruct.AnonymousDominantIndexes),
-		mapx.KeySet(tgtStruct.AnonymousDominantIndexes),
-	))
+	fieldIndexes := mergeFieldInfoIndexes(opts, srcStruct.AllFieldIndexes, tgtStruct.AllFieldIndexes)
 
-	for _, label := range fieldLabels {
-		entryFullKeys := append(slices.Clone(labels), label)
-		var srcFieldVal reflect.Value
-		var cloner clonerFunc
-		var err error
-		// 查找 source field
-		srcFieldVal, ok := getValueFromField(e, entryFullKeys, tgtVal, srcVal, opts, srcStruct, label)
-		if ok {
-			cloner = typeCloner(srcFieldVal.Type(), true, opts)
-		} else {
-			// 查找 source getter
-			srcFieldVal, ok, err = getValueFromGetter(e, entryFullKeys, tgtVal, srcVal, opts, srcStruct, label)
+	for label, fields := range fieldIndexes {
+		for _, field := range fields {
+			entryLabels := append(slices.Clone(labels), field.Label)
+			var srcFieldVal reflect.Value
+			var cloner clonerFunc
+			var err error
+			// 查找 source field
+			srcFieldVal, ok := getValueFromField(e, entryLabels, tgtVal, srcVal, opts, srcStruct, label, field)
+			if ok {
+				cloner = typeCloner(srcFieldVal.Type(), true, opts)
+			} else {
+				// 查找 source getter
+				srcFieldVal, ok, err = getValueFromGetter(e, entryLabels, tgtVal, srcVal, opts, srcStruct, label)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					continue
+				}
+				cloner = valueCloner(srcFieldVal, opts)
+			}
+
+			// 将 source field value 设置到 target field
+			ok, err = setValueToField(e, entryLabels, tgtVal, srcFieldVal, opts, tgtStruct, label, field, cloner)
 			if err != nil {
 				return err
 			}
-			if !ok {
+			if ok {
 				continue
 			}
-			cloner = valueCloner(srcFieldVal, opts)
-		}
-
-		// 将 source field value 设置到 target field
-		ok, err = setValueToField(e, entryFullKeys, tgtVal, srcFieldVal, opts, tgtStruct, label, cloner)
-		if err != nil {
-			return err
-		}
-		if ok {
-			continue
-		}
-		// 上面失败，则将 source field value 设置到 target setter
-		ok, err = setValueToSetter(e, entryFullKeys, tgtVal, srcFieldVal, opts, tgtStruct, label, cloner)
-		if err != nil {
-			return err
-		}
-		if ok {
-			continue
+			// 上面失败，则将 source field value 设置到 target setter
+			ok, err = setValueToSetter(e, entryLabels, tgtVal, srcFieldVal, opts, tgtStruct, label, cloner)
+			if err != nil {
+				return err
+			}
+			if ok {
+				continue
+			}
 		}
 	}
 	return nil
 }
 
-func getValueFromField(_ *cloneContext, _ []string, _ reflect.Value, srcVal reflect.Value, opts *options, srcStruct *structInfo, label string) (reflect.Value, bool) {
-	srcField, ok := srcStruct.FindField(label, opts)
+func getValueFromField(_ *cloneContext, _ []string, _ reflect.Value, srcVal reflect.Value, opts *options,
+	srcStruct *structInfo, fieldLabel string, field *fieldInfo) (reflect.Value, bool) {
+	srcField, ok := srcStruct.FindField(fieldLabel, field, opts)
 	if !ok {
 		return reflect.Value{}, false
 	}
@@ -1094,8 +1090,9 @@ func getValueFromGetter(_ *cloneContext, _ []string, _ reflect.Value, srcVal ref
 	return outVal, true, nil
 }
 
-func setValueToField(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tgtStruct *structInfo, label string, srcValCloner clonerFunc) (bool, error) {
-	tgtField, ok := tgtStruct.FindField(label, opts)
+func setValueToField(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options,
+	tgtStruct *structInfo, fieldLabel string, field *fieldInfo, srcValCloner clonerFunc) (bool, error) {
+	tgtField, ok := tgtStruct.FindField(fieldLabel, field, opts)
 	if !ok {
 		return false, nil
 	}

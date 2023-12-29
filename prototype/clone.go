@@ -15,7 +15,7 @@ type options struct {
 	KindHooks    map[reflect.Kind]map[reflect.Kind]Hook
 	TagKey       string
 	DeepClone    bool
-	NameComparer func(t, s string) bool
+	EqualFold    func(t, s string) bool
 	IntToTime    func(i int64) time.Time
 	StringToTime func(s string) (time.Time, error)
 	TimeToInt    func(t time.Time) int64
@@ -32,8 +32,8 @@ func (o *options) apply(opts ...Option) *options {
 }
 
 func (o *options) correct() *options {
-	if o.NameComparer == nil {
-		o.NameComparer = strings.EqualFold
+	if o.EqualFold == nil {
+		o.EqualFold = strings.EqualFold
 	}
 	if o.IntToTime == nil {
 		o.IntToTime = func(i int64) time.Time { return time.Unix(i, 0) }
