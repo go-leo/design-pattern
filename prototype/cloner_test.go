@@ -1,6 +1,7 @@
 package prototype_test
 
 import (
+	"context"
 	"database/sql"
 	"encoding/base64"
 	"github.com/go-leo/design-pattern/prototype"
@@ -810,6 +811,33 @@ func TestMapCloner(t *testing.T) {
 	expected = string(errorx.Ignore(jsoniter.Marshal(srcMap)))
 	actual = string(errorx.Ignore(jsoniter.Marshal(tgtAny)))
 	assert.JSONEq(t, expected, actual)
+}
+
+func TestMapStructCloner(t *testing.T) {
+	var err error
+	var expected string
+	var actual string
+
+	srcMap := map[string]any{
+		"Msg":      "success",
+		"Username": "Forest",
+		"IsPass":   false,
+		"Int":      int64(0),
+		"Code": map[string]any{
+			"Msg":  "ok",
+			"Code": int64(200),
+			"Error": map[string]any{
+				"Course": "Course",
+				"Msg":    "error msg",
+			},
+		},
+		"Info": map[any]any{
+			10:     "10",
+			false:  "FALSE",
+			"TRUE": true,
+			23.4:   []int{2, 3, 4},
+		},
+	}
 
 	type Error struct {
 		Course string
@@ -848,38 +876,30 @@ func TestMapCloner(t *testing.T) {
 }
 
 type testMapSetter struct {
-	msg      string
-	username string
-	age      int
+	msg  string
+	code int
 }
 
-func (x *testMapSetter) Msg(msg string) {
-	x.msg = msg
+func (x *testMapSetter) Code(c int) {
+	x.code = 1000 + c
 }
 
-func (x *testMapSetter) Username(name string) error {
-	x.username = name
-	return nil
-}
-
-func (x *testMapSetter) Age(age int) error {
-	x.age = age * 10
+func (x *testMapSetter) Msg(_ context.Context, msg string) error {
+	x.msg = "msg: " + msg
 	return nil
 }
 
 func TestMapSetterCloner(t *testing.T) {
 	srcMap := map[string]any{
-		"msg":      "success",
-		"username": "Forest",
-		"age":      30,
+		"msg":  "success",
+		"code": 200,
 	}
 	var tgtMapSetter testMapSetter
 	err := prototype.Clone(&tgtMapSetter, srcMap)
 	assert.NoError(t, err)
 	assert.EqualValues(t, testMapSetter{
-		msg:      "success",
-		username: "Forest",
-		age:      300,
+		msg:  "msg: success",
+		code: 1200,
 	}, tgtMapSetter)
 }
 

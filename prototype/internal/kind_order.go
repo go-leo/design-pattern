@@ -3,7 +3,7 @@ package internal
 import "reflect"
 
 const (
-	Invalid uint = iota
+	_ uint = iota
 	Bool
 	Int
 	Int8
@@ -30,6 +30,7 @@ const (
 	Chan
 	Func
 	UnsafePointer
+	Invalid
 )
 
 var KindOrder = map[reflect.Kind]uint{

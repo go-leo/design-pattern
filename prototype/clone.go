@@ -1,6 +1,7 @@
 package prototype
 
 import (
+	"context"
 	"reflect"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ type options struct {
 	TimeToString func(t time.Time) string
 	GetterPrefix string
 	SetterPrefix string
+	Context      context.Context
 }
 
 func (o *options) apply(opts ...Option) *options {
@@ -47,6 +49,9 @@ func (o *options) correct() *options {
 	if o.TimeToString == nil {
 		o.TimeToString = func(t time.Time) string { return t.Local().Format(time.DateTime) }
 	}
+	if o.Context == nil {
+		o.Context = context.TODO()
+	}
 	return o
 }
 
@@ -67,6 +72,12 @@ func GetterPrefix(p string) Option {
 func SetterPrefix(p string) Option {
 	return func(o *options) {
 		o.SetterPrefix = p
+	}
+}
+
+func Context(ctx context.Context) Option {
+	return func(o *options) {
+		o.Context = ctx
 	}
 }
 

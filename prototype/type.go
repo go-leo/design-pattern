@@ -1,6 +1,7 @@
 package prototype
 
 import (
+	"context"
 	"database/sql"
 	"encoding"
 	"fmt"
@@ -18,7 +19,8 @@ var (
 	clonerFromType = reflect.TypeOf((*ClonerFrom)(nil)).Elem()
 	clonerToType   = reflect.TypeOf((*ClonerTo)(nil)).Elem()
 
-	errorType = reflect.TypeOf((*error)(nil)).Elem()
+	errorType   = reflect.TypeOf((*error)(nil)).Elem()
+	contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
 
 	textMarshalerType = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
 	stringerType      = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()

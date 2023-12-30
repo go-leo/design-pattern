@@ -916,13 +916,19 @@ func setMapToStruct(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 	if err != nil {
 		return err
 	}
+	setFunc := func(e *cloneContext, labels []string, srcVal reflect.Value, opts *options) func(in reflect.Value) error {
+		return func(tgtVal reflect.Value) error {
+			return srcValCloner(e, labels, tgtVal, srcVal, opts)
+		}
+	}
 
-	tgtStruct := cachedStruct(tgtVal.Type(), opts)
-
+	tgtStruct := _CachedStructInfo(tgtVal.Type(), opts)
 	for _, srcEntry := range srcEntries {
-		entryLabels := append(slices.Clone(labels), srcEntry.Label)
-		_, err := setValue(e, entryLabels, tgtVal, srcEntry.ValVal, opts, tgtStruct, srcEntry.Label, nil, srcValCloner)
-		if err != nil {
+		field := tgtStruct.FindValueByLabel(srcEntry.Label)
+		if field == nil {
+			continue
+		}
+		if err := field.SetValue(tgtStruct, tgtVal, opts, setFunc(e, append(slices.Clone(labels), srcEntry.Label), srcEntry.ValVal, opts)); err != nil {
 			return err
 		}
 	}
@@ -935,19 +941,20 @@ func setStructToAny(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 	}
 	m := make(map[any]any)
 	srcType := srcVal.Type()
-	srcStruct := cachedStruct(srcType, opts)
-	err := srcStruct.RangeFields(func(label string, field *fieldInfo) error {
-		var tgtEntryVal any
-		srcFieldVal, ok := field.FindGettableValue(srcVal)
-		if !ok {
+	srcStruct := _CachedStructInfo(srcType, opts)
+	err := srcStruct.RangeFields(func(label string, srcField *_FieldInfo) error {
+		srcFieldVal, err := srcField.GetValue(srcVal, srcStruct, opts)
+		if err != nil {
+			return err
+		}
+		if !srcFieldVal.IsValid() {
 			return nil
 		}
 
-		entryLabels := append(slices.Clone(labels), label)
-
+		var tgtEntryVal any
 		cloner := typeCloner(srcFieldVal.Type(), true, opts)
-		err := cloner(e, entryLabels, reflect.ValueOf(&tgtEntryVal), srcFieldVal, opts)
-		if err != nil {
+		if err := cloner(e, append(slices.Clone(labels), label),
+			reflect.ValueOf(&tgtEntryVal), srcFieldVal, opts); err != nil {
 			return err
 		}
 		m[label] = tgtEntryVal
@@ -970,15 +977,18 @@ func setStructToMap(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 	}
 
 	srcType := srcVal.Type()
-	srcStruct := cachedStruct(srcType, opts)
-	err := srcStruct.RangeFields(func(label string, field *fieldInfo) error {
-		entryLabels := append(slices.Clone(labels), label)
-
-		srcFieldVal, ok := field.FindGettableValue(srcVal)
-		if !ok {
+	srcStruct := _CachedStructInfo(srcType, opts)
+	err := srcStruct.RangeFields(func(label string, srcField *_FieldInfo) error {
+		srcFieldVal, err := srcField.GetValue(srcVal, srcStruct, opts)
+		if err != nil {
+			return err
+		}
+		if !srcFieldVal.IsValid() {
 			return nil
 		}
+		cloner := typeCloner(srcFieldVal.Type(), true, opts)
 
+		entryLabels := append(slices.Clone(labels), label)
 		tgtEntryKeyVal := reflect.New(tgtKeyType)
 		if err := stringCloner(e, entryLabels, tgtEntryKeyVal, reflect.ValueOf(label), opts); err != nil {
 			return err
@@ -989,8 +999,6 @@ func setStructToMap(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 		}
 
 		tgtEntryValVal := reflect.New(tgtValType)
-
-		cloner := typeCloner(srcFieldVal.Type(), true, opts)
 		if err := cloner(e, entryLabels, tgtEntryValVal, srcFieldVal, opts); err != nil {
 			return err
 		}
@@ -1007,39 +1015,37 @@ func setStructToMap(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 
 func setStructToStruct(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	srcType := srcVal.Type()
-	srcStruct := cachedStruct(srcType, opts)
+	srcStruct := _CachedStructInfo(srcType, opts)
 
 	tgtType := tgtVal.Type()
-	tgtStruct := cachedStruct(tgtType, opts)
+	tgtStruct := _CachedStructInfo(tgtType, opts)
 
-	fieldIndexes := mergeFieldInfoIndexes(opts, srcStruct.AllFieldIndexes, tgtStruct.AllFieldIndexes)
-
-	for label, fields := range fieldIndexes {
-		for _, field := range fields {
-			entryLabels := append(slices.Clone(labels), field.Label)
-			var srcFieldVal reflect.Value
-			var cloner clonerFunc
-			var err error
-			// 查找 source field
-			srcFieldVal, ok := getValueFromField(e, entryLabels, tgtVal, srcVal, opts, srcStruct, label, field)
-			if ok {
-				cloner = typeCloner(srcFieldVal.Type(), true, opts)
-			} else {
-				// 查找 source getter
-				srcFieldVal, ok, err = getValueFromGetter(e, entryLabels, tgtVal, srcVal, opts, srcStruct, label)
-				if err != nil {
-					return err
-				}
-				if !ok {
-					continue
-				}
-				cloner = valueCloner(srcFieldVal, opts)
-			}
-
-			if _, err = setValue(e, entryLabels, tgtVal, srcFieldVal, opts, tgtStruct, label, field, cloner); err != nil {
-				return err
-			}
+	setFunc := func(e *cloneContext, labels []string, srcVal reflect.Value, opts *options) func(in reflect.Value) error {
+		return func(tgtVal reflect.Value) error {
+			cloner := valueCloner(srcVal, opts)
+			return cloner(e, labels, tgtVal, srcVal, opts)
 		}
+	}
+
+	f := func(label string, srcField *_FieldInfo) error {
+		srcFieldVal, err := srcField.GetValue(srcVal, srcStruct, opts)
+		if err != nil {
+			return err
+		}
+		if !srcFieldVal.IsValid() {
+			return nil
+		}
+		tgtField := tgtStruct.FindValueByLabel(label)
+		if tgtField == nil {
+			return err
+		}
+		return tgtField.SetValue(tgtStruct, tgtVal, opts, setFunc(e, append(slices.Clone(labels), label), srcFieldVal, opts))
+	}
+	if err := srcStruct.RangeAllFields(f); err != nil {
+		return err
+	}
+	if err := srcStruct.RangeEmbedFields(f); err != nil {
+		return err
 	}
 	return nil
 }

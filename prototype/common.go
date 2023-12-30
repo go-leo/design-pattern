@@ -63,9 +63,9 @@ func indirectType(t reflect.Type) reflect.Type {
 	return t
 }
 
-func indirectValue(t reflect.Value) reflect.Value {
-	for t.Kind() == reflect.Pointer || t.Kind() == reflect.Interface {
-		t = t.Elem()
+func indirectValue(v reflect.Value) reflect.Value {
+	for (v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface) && !v.IsNil() {
+		v = v.Elem()
 	}
-	return t
+	return v
 }
