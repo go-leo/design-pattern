@@ -141,7 +141,7 @@ func boolCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.V
 	case reflect.Float32, reflect.Float64:
 		return setFloat(labels, tv, float64(boolIntMap[b]))
 	case reflect.Pointer:
-		return setPointer(g, labels, tv, srcVal, opts, boolCloner)
+		return setPointer(g, labels, tv, srcVal, opts)
 	case reflect.Struct:
 		return setBoolToStruct(g, labels, tv, srcVal, opts, b)
 	default:
@@ -186,7 +186,7 @@ func intCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Va
 		tv.SetString(strconv.FormatInt(i, 10))
 		return nil
 	case reflect.Pointer:
-		return setPointer(g, labels, tv, srcVal, opts, intCloner)
+		return setPointer(g, labels, tv, srcVal, opts)
 	case reflect.Struct:
 		return setIntToStruct(g, labels, tv, srcVal, opts, i)
 	default:
@@ -231,7 +231,7 @@ func uintCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.V
 		tv.SetString(strconv.FormatUint(u, 10))
 		return nil
 	case reflect.Pointer:
-		return setPointer(g, labels, tv, srcVal, opts, uintCloner)
+		return setPointer(g, labels, tv, srcVal, opts)
 	case reflect.Struct:
 		return setUintToStruct(g, labels, tv, srcVal, opts, u)
 	default:
@@ -276,7 +276,7 @@ func floatCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.
 		tv.SetString(strconv.FormatFloat(f, 'f', -1, 64))
 		return nil
 	case reflect.Pointer:
-		return setPointer(g, labels, tv, srcVal, opts, floatCloner)
+		return setPointer(g, labels, tv, srcVal, opts)
 	case reflect.Struct:
 		return setFloatToStruct(g, labels, tv, srcVal, opts, f)
 	default:
@@ -356,7 +356,7 @@ func stringCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect
 		}
 		return setFloat(labels, tv, f)
 	case reflect.Pointer:
-		return setPointer(g, labels, tv, srcVal, opts, stringCloner)
+		return setPointer(g, labels, tv, srcVal, opts)
 	case reflect.Struct:
 		return setStringToStruct(g, labels, tv, srcVal, opts, s)
 	default:
@@ -435,7 +435,7 @@ func bytesCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.
 		}
 		return setFloat(labels, tv, f)
 	case reflect.Pointer:
-		return setPointer(g, labels, tv, srcVal, opts, bytesCloner)
+		return setPointer(g, labels, tv, srcVal, opts)
 	case reflect.Struct:
 		return setBytesToStruct(g, labels, tv, srcVal, opts, bs)
 	default:
@@ -485,7 +485,7 @@ func timeCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.V
 	case reflect.Float32, reflect.Float64:
 		return setFloat(labels, tv, float64(opts.TimeToInt(t)))
 	case reflect.Pointer:
-		return setPointer(g, labels, tv, srcVal, opts, timeCloner)
+		return setPointer(g, labels, tv, srcVal, opts)
 	default:
 		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
@@ -573,7 +573,7 @@ func arrayCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.
 	case reflect.Interface:
 		return setAnySlice(g, labels, tv, srcVal, opts)
 	case reflect.Pointer:
-		return setPointer(g, labels, tv, srcVal, opts, arrayCloner)
+		return setPointer(g, labels, tv, srcVal, opts)
 	default:
 		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
@@ -604,7 +604,7 @@ func _mapCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.V
 	case reflect.Struct:
 		return setMapToStruct(g, labels, tv, srcVal, opts)
 	case reflect.Pointer:
-		return setPointer(g, labels, tv, srcVal, opts, _mapCloner)
+		return setPointer(g, labels, tv, srcVal, opts)
 	default:
 		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
@@ -726,7 +726,7 @@ func structCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect
 		case reflect.Map:
 			return setStructToMap(g, labels, tv, srcVal, opts)
 		case reflect.Pointer:
-			return setPointer(g, labels, tv, srcVal, opts, structCloner)
+			return setPointer(g, labels, tv, srcVal, opts)
 		default:
 			return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 		}

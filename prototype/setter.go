@@ -71,12 +71,12 @@ func setFloat2Uint(labels []string, tgtVal reflect.Value, f float64) error {
 	return setUint(labels, tgtVal, uint64(f))
 }
 
-func setPointer(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, cloner func(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error) error {
+func setPointer(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsNil() {
-		return cloner(g, labels, tgtVal, srcVal, opts)
+		return valueCloner(srcVal, opts)(g, labels, tgtVal, srcVal, opts)
 	}
 	tgtVal.Set(reflect.New(tgtVal.Type().Elem()))
-	return cloner(g, labels, tgtVal, srcVal, opts)
+	return valueCloner(srcVal, opts)(g, labels, tgtVal, srcVal, opts)
 }
 
 func setAnyValue(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, i any) error {
