@@ -1,7 +1,6 @@
 package prototype
 
 import (
-	"fmt"
 	"golang.org/x/exp/slices"
 	"reflect"
 	"strings"
@@ -578,9 +577,7 @@ func newMapEntries(srcMapIter *reflect.MapIter) (_MapEntries, error) {
 		if err != nil {
 			return nil, newStringifyError(keyVal.Type(), err)
 		}
-
 		valVal := srcMapIter.Value()
-		fmt.Println(valVal.Type())
 		if !valVal.IsValid() {
 			continue
 		}

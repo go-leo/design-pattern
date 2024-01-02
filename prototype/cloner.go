@@ -506,7 +506,8 @@ func interfaceCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal refl
 
 /*
 pointerCloner 克隆pointer类型
-pointer ----> reflect.Type ----> typeCloner
+pointer ----> noDeepClone ----> tgtPtr = srcPtr
+pointer ----> DeepClone ----> valueCloner
 */
 func pointerCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if srcVal.IsNil() {
