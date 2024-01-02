@@ -584,9 +584,6 @@ func newMapEntries(srcMapIter *reflect.MapIter) (_MapEntries, error) {
 		if !valVal.IsValid() {
 			continue
 		}
-		if valVal.IsNil() {
-
-		}
 		entries = append(entries, _MapEntry{
 			KeyVal:  keyVal,
 			Label:   label,

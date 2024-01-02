@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -1261,12 +1262,97 @@ func TestNestedGetSetterPointer(t *testing.T) {
 	}, tgt)
 }
 
-func TestRune(t *testing.T) {
-	s := "ssss"
-	t.Log([]int32(s))
-	t.Log([]byte(s))
-	bs := []byte("bsbs")
-	t.Log(string(bs))
-	//t.Log([]rune(bs))
+func TestDisableDeepClone(t *testing.T) {
+	srcInt := 10
+	var tgtIntPtr *int
 
+	err := prototype.Clone(&tgtIntPtr, &srcInt, prototype.DisableDeepClone())
+	assert.NoError(t, err)
+	assert.Equal(t, &srcInt, tgtIntPtr)
+
+	tgtIntPPtr := &tgtIntPtr
+	err = prototype.Clone(&tgtIntPPtr, &srcInt, prototype.DisableDeepClone())
+	assert.NoError(t, err)
+	assert.Equal(t, &srcInt, *tgtIntPPtr)
+
+	srcIntPtr := &srcInt
+	srcIntPPtr := &srcIntPtr
+	err = prototype.Clone(&tgtIntPPtr, &srcIntPPtr, prototype.DisableDeepClone())
+	assert.NoError(t, err)
+	assert.Equal(t, *srcIntPPtr, *tgtIntPPtr)
+
+	tgtIntPtr = new(int)
+	err = prototype.Clone(&tgtIntPtr, &srcInt, prototype.DisableDeepClone())
+	assert.NoError(t, err)
+	assert.Equal(t, &srcInt, tgtIntPtr)
+
+	type B struct {
+		B int
+	}
+
+	type A struct {
+		B *B
+	}
+
+	srcAStruct := A{
+		B: &B{
+			B: 10,
+		},
+	}
+
+	var tgtAStruct *A
+	err = prototype.Clone(&tgtAStruct, &srcAStruct, prototype.DisableDeepClone())
+	assert.NoError(t, err)
+	assert.Equal(t, &srcAStruct, tgtAStruct)
+	assert.Equal(t, srcAStruct.B, tgtAStruct.B)
+
+	type AA struct {
+		B *B
+	}
+	var tgtAAStruct AA
+	err = prototype.Clone(&tgtAAStruct, &srcAStruct, prototype.DisableDeepClone())
+	assert.NoError(t, err)
+	assert.Equal(t, srcAStruct.B, tgtAAStruct.B)
+}
+
+func TestRune(t *testing.T) {
+	var n *int
+	a := &n
+	ap := &a
+	app := &ap
+	appp := &app
+
+	tgtVal := reflect.ValueOf(&appp)
+	for tgtVal.Type().Elem().Kind() == reflect.Pointer {
+		if tgtVal.IsNil() {
+			tgtVal.Set(reflect.New(tgtVal.Type().Elem()))
+		}
+		tgtVal = tgtVal.Elem()
+	}
+	t.Logf("%T, %v", tgtVal.Interface(), tgtVal.Interface())
+
+	i := 10
+	b := &i
+	bp := &b
+	bpp := &bp
+	bppp := &bpp
+	of := reflect.ValueOf(bppp)
+	value := indirectValue(of).Addr()
+	tgtVal.Set(value)
+
+	t.Logf("%p, %p", tgtVal.Interface(), value.Interface())
+	t.Logf("%v, %v", tgtVal.Elem().Interface(), value.Elem().Interface())
+	t.Logf("%p, %v", &i, n)
+
+	*n = 100
+	t.Logf("%p, %v", &i, i)
+	assert.Equal(t, 100, i)
+
+}
+
+func indirectValue(v reflect.Value) reflect.Value {
+	for (v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface) && !v.IsNil() {
+		v = v.Elem()
+	}
+	return v
 }

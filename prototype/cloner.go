@@ -512,6 +512,22 @@ func pointerCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflec
 	if srcVal.IsNil() {
 		return nil
 	}
+	// 浅克隆，并且类型相同
+	if !opts.DeepClone && tgtVal.Kind() == reflect.Pointer && indirectType(tgtVal.Type()) == indirectType(srcVal.Type()) {
+		srcVal = indirectValue(srcVal)
+		if srcVal.Kind() == reflect.Pointer && srcVal.IsNil() {
+			return nil
+		}
+		for tgtVal.Type().Elem().Kind() == reflect.Pointer {
+			if tgtVal.IsNil() {
+				tgtVal.Set(reflect.New(tgtVal.Type().Elem()))
+			}
+			tgtVal = tgtVal.Elem()
+		}
+		tgtVal.Set(srcVal.Addr())
+		return nil
+	}
+
 	srcVal = srcVal.Elem()
 	cloner := g.checkPointerCycle(
 		func(srcVal reflect.Value) any { return srcVal.Interface() },

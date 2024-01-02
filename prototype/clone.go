@@ -61,6 +61,12 @@ func TagKey(key string) Option {
 	}
 }
 
+func DisableDeepClone() Option {
+	return func(o *options) {
+		o.DeepClone = false
+	}
+}
+
 func GetterPrefix(p string) Option {
 	return func(o *options) {
 		o.GetterPrefix = p
