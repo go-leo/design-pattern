@@ -108,6 +108,6 @@ func Clone(tgt any, src any, opts ...Option) error {
 	return clone(ctx, tgtVal, srcVal, o)
 }
 
-func clone(e *cloneContext, tgtVal, srcVal reflect.Value, opts *options) error {
-	return valueCloner(srcVal, opts)(e, []string{}, tgtVal, srcVal, opts)
+func clone(g *stackOverflowGuard, tgtVal, srcVal reflect.Value, opts *options) error {
+	return valueCloner(srcVal, opts)(g, []string{}, tgtVal, srcVal, opts)
 }

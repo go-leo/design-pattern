@@ -71,47 +71,47 @@ func setFloat2Uint(labels []string, tgtVal reflect.Value, f float64) error {
 	return setUint(labels, tgtVal, uint64(f))
 }
 
-func setPointer(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, cloner func(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error) error {
+func setPointer(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, cloner func(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error) error {
 	if !tgtVal.IsNil() {
-		return cloner(e, labels, tgtVal, srcVal, opts)
+		return cloner(g, labels, tgtVal, srcVal, opts)
 	}
 	tgtVal.Set(reflect.New(tgtVal.Type().Elem()))
-	return cloner(e, labels, tgtVal, srcVal, opts)
+	return cloner(g, labels, tgtVal, srcVal, opts)
 }
 
-func setAnyValue(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, i any) error {
+func setAnyValue(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, i any) error {
 	if tgtVal.NumMethod() > 0 {
-		return unsupportedTypeCloner(e, labels, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
 	tgtVal.Set(reflect.ValueOf(i))
 	return nil
 }
 
-func setScanner(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, v any) error {
+func setScanner(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, v any) error {
 	if !tgtVal.CanAddr() {
-		return unsupportedTypeCloner(e, labels, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
 	scanner := tgtVal.Addr().Interface().(sql.Scanner)
 	return scanner.Scan(v)
 }
 
-func setAnyProtoBuf(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, v proto.Message) error {
+func setAnyProtoBuf(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, v proto.Message) error {
 	if !tgtVal.CanAddr() {
-		return unsupportedTypeCloner(e, labels, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
 	tgtPtr := tgtVal.Addr().Interface().(*anypb.Any)
 	return anypb.MarshalFrom(tgtPtr, v, proto.MarshalOptions{})
 }
 
-func setBoolToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, b bool) error {
+func setBoolToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, b bool) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case sqlNullBoolType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, b)
+		return setScanner(g, labels, tgtVal, srcVal, opts, b)
 	case sqlNullInt16Type, sqlNullInt32Type, sqlNullInt64Type, sqlNullByteType, sqlNullFloat64Type:
-		return setScanner(e, labels, tgtVal, srcVal, opts, boolIntMap[b])
+		return setScanner(g, labels, tgtVal, srcVal, opts, boolIntMap[b])
 	case sqlNullStringType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, strconv.FormatBool(b))
+		return setScanner(g, labels, tgtVal, srcVal, opts, strconv.FormatBool(b))
 	case wrappersPBBoolType:
 		tgtVal.FieldByName("Value").SetBool(b)
 		return nil
@@ -134,7 +134,7 @@ func setBoolToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, src
 	case emptyPBEmptyType:
 		return nil
 	case anyPBAnyType:
-		return setAnyProtoBuf(e, labels, tgtVal, srcVal, opts, &wrapperspb.BoolValue{Value: b})
+		return setAnyProtoBuf(g, labels, tgtVal, srcVal, opts, &wrapperspb.BoolValue{Value: b})
 
 	case structPBBoolValueType:
 		tgtVal.FieldByName("BoolValue").SetBool(b)
@@ -150,38 +150,38 @@ func setBoolToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, src
 		tgtVal.Set(reflect.ValueOf(value).Elem())
 		return nil
 	default:
-		return unsupportedTypeCloner(e, labels, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
 }
 
-func setIntToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, i int64) error {
+func setIntToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, i int64) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case sqlNullInt16Type:
 		if i > math.MaxInt16 {
 			return newOverflowError(labels, tgtType, strconv.FormatInt(i, 10))
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, i)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i)
 	case sqlNullInt32Type:
 		if i > math.MaxInt32 {
 			return newOverflowError(labels, tgtType, strconv.FormatInt(i, 10))
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, i)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i)
 	case sqlNullInt64Type:
-		return setScanner(e, labels, tgtVal, srcVal, opts, i)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i)
 	case sqlNullByteType:
 		if i > math.MaxUint8 {
 			return newOverflowError(labels, tgtType, strconv.FormatInt(i, 10))
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, i)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i)
 	case sqlNullFloat64Type:
-		return setScanner(e, labels, tgtVal, srcVal, opts, i)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i)
 	case sqlNullBoolType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, i != 0)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i != 0)
 	case sqlNullStringType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, strconv.FormatInt(i, 10))
+		return setScanner(g, labels, tgtVal, srcVal, opts, strconv.FormatInt(i, 10))
 	case sqlNullTimeType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, opts.IntToTime(i))
+		return setScanner(g, labels, tgtVal, srcVal, opts, opts.IntToTime(i))
 
 	case timestampPBTimestampType:
 		t := opts.IntToTime(i)
@@ -237,7 +237,7 @@ func setIntToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, srcV
 	case emptyPBEmptyType:
 		return nil
 	case anyPBAnyType:
-		return setAnyProtoBuf(e, labels, tgtVal, srcVal, opts, &wrapperspb.Int64Value{Value: i})
+		return setAnyProtoBuf(g, labels, tgtVal, srcVal, opts, &wrapperspb.Int64Value{Value: i})
 
 	case structPBNumberValueType:
 		tgtVal.FieldByName("NumberValue").SetFloat(float64(i))
@@ -253,41 +253,41 @@ func setIntToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, srcV
 		tgtVal.FieldByName("StringValue").SetString(strconv.FormatInt(i, 10))
 		return nil
 	default:
-		return unsupportedTypeCloner(e, labels, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
 }
 
-func setUintToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, u uint64) error {
+func setUintToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, u uint64) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case sqlNullByteType:
 		if u > math.MaxUint8 {
 			return newOverflowError(labels, tgtType, strconv.FormatUint(u, 10))
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, u)
+		return setScanner(g, labels, tgtVal, srcVal, opts, u)
 	case sqlNullInt16Type:
 		if u > math.MaxInt16 {
 			return newOverflowError(labels, tgtType, strconv.FormatUint(u, 10))
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, u)
+		return setScanner(g, labels, tgtVal, srcVal, opts, u)
 	case sqlNullInt32Type:
 		if u > math.MaxInt32 {
 			return newOverflowError(labels, tgtType, strconv.FormatUint(u, 10))
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, u)
+		return setScanner(g, labels, tgtVal, srcVal, opts, u)
 	case sqlNullInt64Type:
 		if u > math.MaxInt64 {
 			return newOverflowError(labels, tgtType, strconv.FormatUint(u, 10))
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, u)
+		return setScanner(g, labels, tgtVal, srcVal, opts, u)
 	case sqlNullFloat64Type:
-		return setScanner(e, labels, tgtVal, srcVal, opts, u)
+		return setScanner(g, labels, tgtVal, srcVal, opts, u)
 	case sqlNullBoolType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, u != 0)
+		return setScanner(g, labels, tgtVal, srcVal, opts, u != 0)
 	case sqlNullStringType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, strconv.FormatUint(u, 10))
+		return setScanner(g, labels, tgtVal, srcVal, opts, strconv.FormatUint(u, 10))
 	case sqlNullTimeType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, opts.IntToTime(int64(u)))
+		return setScanner(g, labels, tgtVal, srcVal, opts, opts.IntToTime(int64(u)))
 
 	case timestampPBTimestampType:
 		t := opts.IntToTime(int64(u))
@@ -340,7 +340,7 @@ func setUintToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, src
 	case emptyPBEmptyType:
 		return nil
 	case anyPBAnyType:
-		return setAnyProtoBuf(e, labels, tgtVal, srcVal, opts, &wrapperspb.UInt64Value{Value: u})
+		return setAnyProtoBuf(g, labels, tgtVal, srcVal, opts, &wrapperspb.UInt64Value{Value: u})
 
 	case structPBNumberValueType:
 		tgtVal.FieldByName("NumberValue").SetFloat(float64(u))
@@ -356,30 +356,30 @@ func setUintToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, src
 		tgtVal.FieldByName("StringValue").SetString(strconv.FormatUint(u, 10))
 		return nil
 	default:
-		return unsupportedTypeCloner(e, labels, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
 }
 
-func setFloatToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, f float64) error {
+func setFloatToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, f float64) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case sqlNullFloat64Type:
-		return setScanner(e, labels, tgtVal, srcVal, opts, f)
+		return setScanner(g, labels, tgtVal, srcVal, opts, f)
 	case sqlNullInt16Type:
 		if f > math.MaxInt16 {
 			return newOverflowError(labels, tgtType, strconv.FormatFloat(f, 'f', -1, 64))
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, f)
+		return setScanner(g, labels, tgtVal, srcVal, opts, f)
 	case sqlNullInt32Type:
 		if f > math.MaxInt32 {
 			return newOverflowError(labels, tgtType, strconv.FormatFloat(f, 'f', -1, 64))
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, f)
+		return setScanner(g, labels, tgtVal, srcVal, opts, f)
 	case sqlNullInt64Type:
 		if f > math.MaxInt64 {
 			return newOverflowError(labels, tgtType, strconv.FormatFloat(f, 'f', -1, 64))
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, f)
+		return setScanner(g, labels, tgtVal, srcVal, opts, f)
 
 	case sqlNullByteType:
 		if f > math.MaxUint8 {
@@ -388,13 +388,13 @@ func setFloatToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, sr
 		if f < 0 {
 			return newNegativeNumberError(labels, tgtType, strconv.FormatFloat(f, 'f', -1, 64))
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, f)
+		return setScanner(g, labels, tgtVal, srcVal, opts, f)
 	case sqlNullStringType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, strconv.FormatFloat(f, 'f', -1, 64))
+		return setScanner(g, labels, tgtVal, srcVal, opts, strconv.FormatFloat(f, 'f', -1, 64))
 	case sqlNullBoolType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, f != 0)
+		return setScanner(g, labels, tgtVal, srcVal, opts, f != 0)
 	case sqlNullTimeType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, opts.IntToTime(int64(f)))
+		return setScanner(g, labels, tgtVal, srcVal, opts, opts.IntToTime(int64(f)))
 
 	case timestampPBTimestampType:
 		t := opts.IntToTime(int64(f))
@@ -462,7 +462,7 @@ func setFloatToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, sr
 	case emptyPBEmptyType:
 		return nil
 	case anyPBAnyType:
-		return setAnyProtoBuf(e, labels, tgtVal, srcVal, opts, &wrapperspb.DoubleValue{Value: f})
+		return setAnyProtoBuf(g, labels, tgtVal, srcVal, opts, &wrapperspb.DoubleValue{Value: f})
 
 	case structPBNumberValueType:
 		tgtVal.FieldByName("NumberValue").SetFloat(f)
@@ -478,15 +478,15 @@ func setFloatToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, sr
 		tgtVal.FieldByName("StringValue").SetString(strconv.FormatFloat(f, 'f', -1, 64))
 		return nil
 	default:
-		return unsupportedTypeCloner(e, labels, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
 }
 
-func setStringToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, s string) error {
+func setStringToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, s string) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case sqlNullStringType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, s)
+		return setScanner(g, labels, tgtVal, srcVal, opts, s)
 	case sqlNullInt16Type:
 		i, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
@@ -495,7 +495,7 @@ func setStringToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, s
 		if i > math.MaxInt16 {
 			return newOverflowError(labels, tgtType, s)
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, i)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i)
 	case sqlNullInt32Type:
 		i, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
@@ -504,7 +504,7 @@ func setStringToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, s
 		if i > math.MaxInt32 {
 			return newOverflowError(labels, tgtType, s)
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, i)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i)
 	case sqlNullInt64Type:
 		i, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
@@ -513,7 +513,7 @@ func setStringToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, s
 		if i > math.MaxInt64 {
 			return newOverflowError(labels, tgtType, s)
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, i)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i)
 	case sqlNullByteType:
 		u, err := strconv.ParseUint(s, 10, 64)
 		if err != nil {
@@ -525,25 +525,25 @@ func setStringToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, s
 		if u < 0 {
 			return newNegativeNumberError(labels, tgtType, s)
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, u)
+		return setScanner(g, labels, tgtVal, srcVal, opts, u)
 	case sqlNullFloat64Type:
 		f, err := strconv.ParseFloat(s, 64)
 		if err != nil {
 			return newParseError(labels, tgtType, s, err)
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, f)
+		return setScanner(g, labels, tgtVal, srcVal, opts, f)
 	case sqlNullBoolType:
 		b, err := strconv.ParseBool(s)
 		if err != nil {
 			return newParseError(labels, tgtType, s, err)
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, b)
+		return setScanner(g, labels, tgtVal, srcVal, opts, b)
 	case sqlNullTimeType:
 		t, err := opts.StringToTime(s)
 		if err != nil {
 			return newParseError(labels, tgtVal.Type(), s, err)
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, t)
+		return setScanner(g, labels, tgtVal, srcVal, opts, t)
 
 	case timestampPBTimestampType:
 		t, err := opts.StringToTime(s)
@@ -636,7 +636,7 @@ func setStringToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, s
 	case emptyPBEmptyType:
 		return nil
 	case anyPBAnyType:
-		return setAnyProtoBuf(e, labels, tgtVal, srcVal, opts, &wrapperspb.StringValue{Value: s})
+		return setAnyProtoBuf(g, labels, tgtVal, srcVal, opts, &wrapperspb.StringValue{Value: s})
 
 	case structPBStringValueType:
 		tgtVal.FieldByName("StringValue").SetString(s)
@@ -661,11 +661,11 @@ func setStringToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, s
 		return nil
 
 	default:
-		return unsupportedTypeCloner(e, labels, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
 }
 
-func setBytesToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, bs []byte) error {
+func setBytesToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, bs []byte) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case wrappersPBBytesType:
@@ -675,7 +675,7 @@ func setBytesToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, sr
 		tgtVal.FieldByName("Value").SetString(base64.StdEncoding.EncodeToString(bs))
 		return nil
 	case anyPBAnyType:
-		return setAnyProtoBuf(e, labels, tgtVal, srcVal, opts, &wrapperspb.BytesValue{Value: bs})
+		return setAnyProtoBuf(g, labels, tgtVal, srcVal, opts, &wrapperspb.BytesValue{Value: bs})
 	case structPBStringValueType:
 		tgtVal.FieldByName("StringValue").SetString(base64.StdEncoding.EncodeToString(bs))
 		return nil
@@ -684,11 +684,11 @@ func setBytesToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, sr
 		tgtVal.Set(reflect.ValueOf(value).Elem())
 		return nil
 	default:
-		return setStringToStruct(e, labels, tgtVal, srcVal, opts, string(bs))
+		return setStringToStruct(g, labels, tgtVal, srcVal, opts, string(bs))
 	}
 }
 
-func setTimeToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, t time.Time) error {
+func setTimeToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, t time.Time) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case timeType:
@@ -696,27 +696,27 @@ func setTimeToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, src
 		return nil
 
 	case sqlNullTimeType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, t)
+		return setScanner(g, labels, tgtVal, srcVal, opts, t)
 	case sqlNullStringType:
-		return setScanner(e, labels, tgtVal, srcVal, opts, opts.TimeToString(t))
+		return setScanner(g, labels, tgtVal, srcVal, opts, opts.TimeToString(t))
 	case sqlNullInt16Type:
 		i := opts.TimeToInt(t)
 		if i > math.MaxInt16 {
 			return newOverflowError(labels, tgtType, t.String())
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, i)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i)
 	case sqlNullInt32Type:
 		i := opts.TimeToInt(t)
 		if i > math.MaxInt32 {
 			return newOverflowError(labels, tgtType, t.String())
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, i)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i)
 	case sqlNullInt64Type:
 		i := opts.TimeToInt(t)
 		if i > math.MaxInt64 {
 			return newOverflowError(labels, tgtType, t.String())
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, i)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i)
 	case sqlNullByteType:
 		i := opts.TimeToInt(t)
 		if i > math.MaxUint8 {
@@ -725,10 +725,10 @@ func setTimeToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, src
 		if i < 0 {
 			return newNegativeNumberError(labels, tgtType, t.String())
 		}
-		return setScanner(e, labels, tgtVal, srcVal, opts, i)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i)
 	case sqlNullFloat64Type:
 		i := opts.TimeToInt(t)
-		return setScanner(e, labels, tgtVal, srcVal, opts, i)
+		return setScanner(g, labels, tgtVal, srcVal, opts, i)
 
 	case timestampPBTimestampType:
 		tgtVal.FieldByName("Seconds").SetInt(t.Unix())
@@ -780,7 +780,7 @@ func setTimeToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, src
 	case emptyPBEmptyType:
 		return nil
 	case anyPBAnyType:
-		return setAnyProtoBuf(e, labels, tgtVal, srcVal, opts, timestamppb.New(t))
+		return setAnyProtoBuf(g, labels, tgtVal, srcVal, opts, timestamppb.New(t))
 
 	case structPBStringValueType:
 		tgtVal.FieldByName("StringValue").SetString(opts.TimeToString(t))
@@ -794,11 +794,11 @@ func setTimeToStruct(e *cloneContext, labels []string, tgtVal reflect.Value, src
 		tgtVal.Set(reflect.ValueOf(value).Elem())
 		return nil
 	default:
-		return unsupportedTypeCloner(e, labels, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
 }
 
-func setSliceArray(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
+func setSliceArray(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
 	srcLen := srcVal.Len()
 	if tgtVal.Kind() == reflect.Slice {
 		tgtVal.Set(reflect.MakeSlice(tgtVal.Type(), srcLen, srcLen))
@@ -807,16 +807,16 @@ func setSliceArray(e *cloneContext, labels []string, tgtVal reflect.Value, srcVa
 	minLen := mathx.Min(srcLen, tgtLen)
 	elemCloner := typeCloner(srcVal.Type().Elem(), true, opts)
 	for i := 0; i < minLen; i++ {
-		if err := elemCloner(e, append(slices.Clone(labels), strconv.Itoa(i)), tgtVal.Index(i), srcVal.Index(i), opts); err != nil {
+		if err := elemCloner(g, append(slices.Clone(labels), strconv.Itoa(i)), tgtVal.Index(i), srcVal.Index(i), opts); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func setAnySlice(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
+func setAnySlice(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
 	if tgtVal.NumMethod() > 0 {
-		return unsupportedTypeCloner(e, labels, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
 	srcLen := srcVal.Len()
 	// 创建一个切片
@@ -824,7 +824,7 @@ func setAnySlice(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal 
 	elemCloner := typeCloner(srcVal.Type().Elem(), true, opts)
 	// 将src的元素逐个拷贝到tgt
 	for i := 0; i < srcLen; i++ {
-		if err := elemCloner(e, append(slices.Clone(labels), strconv.Itoa(i)), reflect.ValueOf(&tgtSlice[i]), srcVal.Index(i), opts); err != nil {
+		if err := elemCloner(g, append(slices.Clone(labels), strconv.Itoa(i)), reflect.ValueOf(&tgtSlice[i]), srcVal.Index(i), opts); err != nil {
 			return err
 		}
 	}
@@ -833,7 +833,7 @@ func setAnySlice(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal 
 	return nil
 }
 
-func setMapToMap(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
+func setMapToMap(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
 	tgtType := tgtVal.Type()
 	if tgtVal.IsNil() {
 		tgtVal.Set(reflect.MakeMap(tgtType))
@@ -854,7 +854,7 @@ func setMapToMap(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal 
 
 	for _, srcEntry := range srcEntries {
 		tgtEntryKeyVal := reflect.New(tgtKeyType)
-		if err := srcKeyCloner(e, append(slices.Clone(labels), srcEntry.Label), tgtEntryKeyVal, srcEntry.KeyVal, opts); err != nil {
+		if err := srcKeyCloner(g, append(slices.Clone(labels), srcEntry.Label), tgtEntryKeyVal, srcEntry.KeyVal, opts); err != nil {
 			return err
 		}
 		tgtEntryKeyVal = tgtEntryKeyVal.Elem()
@@ -863,7 +863,7 @@ func setMapToMap(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal 
 		}
 
 		tgtEntryValVal := reflect.New(tgtValType)
-		if err := srcValCloner(e, append(slices.Clone(labels), srcEntry.Label), tgtEntryValVal, srcEntry.ValVal, opts); err != nil {
+		if err := srcValCloner(g, append(slices.Clone(labels), srcEntry.Label), tgtEntryValVal, srcEntry.ValVal, opts); err != nil {
 			return err
 		}
 		tgtEntryValVal = tgtEntryValVal.Elem()
@@ -876,9 +876,9 @@ func setMapToMap(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal 
 	return nil
 }
 
-func setMapToAny(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
+func setMapToAny(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
 	if tgtVal.NumMethod() > 0 {
-		return unsupportedTypeCloner(e, labels, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
 
 	srcType := srcVal.Type()
@@ -896,12 +896,12 @@ func setMapToAny(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal 
 		entryLabels := append(slices.Clone(labels), srcEntry.Label)
 
 		var tgtEntryKey any
-		if err := srcKeyCloner(e, entryLabels, reflect.ValueOf(&tgtEntryKey), srcEntry.KeyVal, opts); err != nil {
+		if err := srcKeyCloner(g, entryLabels, reflect.ValueOf(&tgtEntryKey), srcEntry.KeyVal, opts); err != nil {
 			return err
 		}
 
 		var tgtEntryVal any
-		if err := srcValCloner(e, entryLabels, reflect.ValueOf(&tgtEntryVal), srcEntry.ValVal, opts); err != nil {
+		if err := srcValCloner(g, entryLabels, reflect.ValueOf(&tgtEntryVal), srcEntry.ValVal, opts); err != nil {
 			return err
 		}
 		m[tgtEntryKey] = tgtEntryVal
@@ -910,40 +910,40 @@ func setMapToAny(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal 
 	return nil
 }
 
-func setMapToStruct(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func setMapToStruct(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	srcValCloner := typeCloner(srcVal.Type().Elem(), true, opts)
 	srcEntries, err := newMapEntries(srcVal.MapRange())
 	if err != nil {
 		return err
 	}
-	setFunc := func(e *cloneContext, labels []string, srcVal reflect.Value, opts *options) func(in reflect.Value) error {
+	setFunc := func(g *stackOverflowGuard, labels []string, srcVal reflect.Value, opts *options) func(in reflect.Value) error {
 		return func(tgtVal reflect.Value) error {
-			return srcValCloner(e, labels, tgtVal, srcVal, opts)
+			return srcValCloner(g, labels, tgtVal, srcVal, opts)
 		}
 	}
 
 	tgtStruct := _CachedStructInfo(tgtVal.Type(), opts)
 	for _, srcEntry := range srcEntries {
-		field := tgtStruct.FindValueByLabel(srcEntry.Label)
+		field := tgtStruct.FindFieldByLabel(srcEntry.Label, opts)
 		if field == nil {
 			continue
 		}
-		if err := field.SetValue(tgtStruct, tgtVal, opts, setFunc(e, append(slices.Clone(labels), srcEntry.Label), srcEntry.ValVal, opts)); err != nil {
+		if err := field.SetValue(tgtStruct, tgtVal, opts, setFunc(g, append(slices.Clone(labels), srcEntry.Label), srcEntry.ValVal, opts)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func setStructToAny(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func setStructToAny(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if tgtVal.NumMethod() > 0 {
-		return unsupportedTypeCloner(e, labels, tgtVal, srcVal, opts)
+		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
 	m := make(map[any]any)
 	srcType := srcVal.Type()
 	srcStruct := _CachedStructInfo(srcType, opts)
 	err := srcStruct.RangeFields(func(label string, srcField *_FieldInfo) error {
-		srcFieldVal, err := srcField.GetValue(srcVal, srcStruct, opts)
+		srcFieldVal, err := srcField.GetValue(srcStruct, srcVal, opts)
 		if err != nil {
 			return err
 		}
@@ -953,7 +953,7 @@ func setStructToAny(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 
 		var tgtEntryVal any
 		cloner := typeCloner(srcFieldVal.Type(), true, opts)
-		if err := cloner(e, append(slices.Clone(labels), label),
+		if err := cloner(g, append(slices.Clone(labels), label),
 			reflect.ValueOf(&tgtEntryVal), srcFieldVal, opts); err != nil {
 			return err
 		}
@@ -967,7 +967,7 @@ func setStructToAny(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 	return nil
 }
 
-func setStructToMap(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func setStructToMap(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	tgtType := tgtVal.Type()
 	tgtKeyType := tgtType.Key()
 	tgtValType := tgtType.Elem()
@@ -979,7 +979,7 @@ func setStructToMap(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 	srcType := srcVal.Type()
 	srcStruct := _CachedStructInfo(srcType, opts)
 	err := srcStruct.RangeFields(func(label string, srcField *_FieldInfo) error {
-		srcFieldVal, err := srcField.GetValue(srcVal, srcStruct, opts)
+		srcFieldVal, err := srcField.GetValue(srcStruct, srcVal, opts)
 		if err != nil {
 			return err
 		}
@@ -990,7 +990,7 @@ func setStructToMap(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 
 		entryLabels := append(slices.Clone(labels), label)
 		tgtEntryKeyVal := reflect.New(tgtKeyType)
-		if err := stringCloner(e, entryLabels, tgtEntryKeyVal, reflect.ValueOf(label), opts); err != nil {
+		if err := stringCloner(g, entryLabels, tgtEntryKeyVal, reflect.ValueOf(label), opts); err != nil {
 			return err
 		}
 		tgtEntryKeyVal = tgtEntryKeyVal.Elem()
@@ -999,7 +999,7 @@ func setStructToMap(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 		}
 
 		tgtEntryValVal := reflect.New(tgtValType)
-		if err := cloner(e, entryLabels, tgtEntryValVal, srcFieldVal, opts); err != nil {
+		if err := cloner(g, entryLabels, tgtEntryValVal, srcFieldVal, opts); err != nil {
 			return err
 		}
 		tgtEntryValVal = tgtEntryValVal.Elem()
@@ -1013,103 +1013,58 @@ func setStructToMap(e *cloneContext, labels []string, tgtVal, srcVal reflect.Val
 	return err
 }
 
-func setStructToStruct(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func setStructToStruct(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	srcType := srcVal.Type()
 	srcStruct := _CachedStructInfo(srcType, opts)
 
 	tgtType := tgtVal.Type()
 	tgtStruct := _CachedStructInfo(tgtType, opts)
 
-	setFunc := func(e *cloneContext, labels []string, srcVal reflect.Value, opts *options) func(in reflect.Value) error {
+	setFunc := func(g *stackOverflowGuard, labels []string, srcVal reflect.Value, opts *options) func(in reflect.Value) error {
 		return func(tgtVal reflect.Value) error {
 			cloner := valueCloner(srcVal, opts)
-			return cloner(e, labels, tgtVal, srcVal, opts)
+			return cloner(g, labels, tgtVal, srcVal, opts)
 		}
 	}
 
-	f := func(label string, srcField *_FieldInfo) error {
-		srcFieldVal, err := srcField.GetValue(srcVal, srcStruct, opts)
+	tgtFields := make(map[*_FieldInfo]struct{})
+
+	srcFunc := func(label string, srcField *_FieldInfo) error {
+		srcFieldVal, err := srcField.GetValue(srcStruct, srcVal, opts)
 		if err != nil {
 			return err
 		}
 		if !srcFieldVal.IsValid() {
 			return nil
 		}
-		tgtField := tgtStruct.FindValueByLabel(label)
+		tgtField := tgtStruct.FindFieldByField(srcField, opts)
 		if tgtField == nil {
+			return nil
+		}
+		tgtFields[tgtField] = struct{}{}
+		return tgtField.SetValue(tgtStruct, tgtVal, opts, setFunc(g, append(slices.Clone(labels), label), srcFieldVal, opts))
+	}
+	if err := srcStruct.RangeAllFields(srcFunc); err != nil {
+		return err
+	}
+
+	tgtFunc := func(label string, tgtField *_FieldInfo) error {
+		if _, ok := tgtFields[tgtField]; ok {
+			return nil
+		}
+		tgtFields[tgtField] = struct{}{}
+		srcField := srcStruct.FindFieldByField(tgtField, opts)
+		if srcField == nil {
+			return nil
+		}
+		srcFieldVal, err := srcField.GetValue(srcStruct, srcVal, opts)
+		if err != nil {
 			return err
 		}
-		return tgtField.SetValue(tgtStruct, tgtVal, opts, setFunc(e, append(slices.Clone(labels), label), srcFieldVal, opts))
+		if !srcFieldVal.IsValid() {
+			return nil
+		}
+		return tgtField.SetValue(tgtStruct, tgtVal, opts, setFunc(g, append(slices.Clone(labels), label), srcFieldVal, opts))
 	}
-	if err := srcStruct.RangeAllFields(f); err != nil {
-		return err
-	}
-	if err := srcStruct.RangeEmbedFields(f); err != nil {
-		return err
-	}
-	return nil
-}
-
-func getValueFromField(_ *cloneContext, _ []string, _ reflect.Value, srcVal reflect.Value, opts *options,
-	srcStruct *structInfo, fieldLabel string, field *fieldInfo) (reflect.Value, bool) {
-	srcField, ok := srcStruct.FindField(fieldLabel, field, opts)
-	if !ok {
-		return reflect.Value{}, false
-	}
-	value, ok := srcField.FindGettableValue(srcVal)
-	return value, ok
-}
-
-func getValueFromGetter(_ *cloneContext, _ []string, _ reflect.Value, srcVal reflect.Value, opts *options, srcStruct *structInfo, label string) (reflect.Value, bool, error) {
-	method, getter, ok := srcStruct.FindGetter(label, srcVal, opts)
-	if !ok {
-		return reflect.Value{}, false, nil
-	}
-	outVal, err := method.InvokeGetter(getter)
-	if err != nil {
-		return reflect.Value{}, true, err
-	}
-	return outVal, true, nil
-}
-
-func setValue(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options,
-	tgtStruct *structInfo, fieldLabel string, field *fieldInfo, cloner clonerFunc) (bool, error) {
-	// 基于label查找目标字段
-	tgtField, ok := tgtStruct.FindField(fieldLabel, field, opts)
-	if !ok {
-		// 如果目标字段找不到，需要用setter设值
-		return setValueToSetter(e, labels, tgtVal, srcVal, opts, tgtStruct, fieldLabel, cloner)
-	}
-	// 获取目标字段value，确保直通field
-	tgtFieldValue, ok := tgtField.FindSettableValue(tgtVal)
-	if !ok {
-		// 找不到可以设置的value，返回错误
-		return true, newSetEmbeddedPointerError(labels, tgtFieldValue.Type())
-	}
-
-	// 如果字段是非导出的，需要用setter设值
-	if !tgtField.IsExported() {
-		return setValueToSetter(e, labels, tgtVal, srcVal, opts, tgtStruct, fieldLabel, cloner)
-	}
-
-	// 克隆值
-	if err := cloner(e, labels, tgtFieldValue, srcVal, opts); err != nil {
-		return true, err
-	}
-	return true, nil
-}
-
-func setValueToSetter(e *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, tgtStruct *structInfo, label string, srcValCloner clonerFunc) (bool, error) {
-	method, setter, ok := tgtStruct.FindSetter(label, tgtVal, opts)
-	if !ok {
-		return false, nil
-	}
-	inVal := reflect.New(setter.Type().In(0)).Elem()
-	if err := srcValCloner(e, labels, inVal, srcVal, opts); err != nil {
-		return true, err
-	}
-	if err := method.InvokeSetter(inVal, setter); err != nil {
-		return true, err
-	}
-	return true, nil
+	return tgtStruct.RangeAllFields(tgtFunc)
 }

@@ -7,70 +7,66 @@ import (
 
 const startDetectingCyclesAfter = 1000
 
-type cloneContext struct {
-	// Keep track of what pointers we've seen in the current recursive call
-	// path, to avoid cycles that could lead to a stack overflow. Only do
-	// the relatively expensive map operations if ptrLevel is larger than
-	// startDetectingCyclesAfter, so that we skip the work if we're within a
-	// reasonable amount of nested pointers deep.
+// stackOverflowGuard 记录递归调用路径中的指针，避免可能导致的堆栈溢出
+type stackOverflowGuard struct {
 	ptrLevel uint
 	ptrSeen  map[any]struct{}
 }
 
-func (e *cloneContext) forward() {
-	e.ptrLevel++
+func (g *stackOverflowGuard) forward() {
+	g.ptrLevel++
 }
 
-func (e *cloneContext) back() {
-	e.ptrLevel--
+func (g *stackOverflowGuard) back() {
+	g.ptrLevel--
 }
 
-func (e *cloneContext) isTooDeep() bool {
-	return e.ptrLevel > startDetectingCyclesAfter
+func (g *stackOverflowGuard) isTooDeep() bool {
+	return g.ptrLevel > startDetectingCyclesAfter
 }
 
-func (e *cloneContext) isSeen(ptr any) bool {
-	_, ok := e.ptrSeen[ptr]
+func (g *stackOverflowGuard) isSeen(ptr any) bool {
+	_, ok := g.ptrSeen[ptr]
 	return ok
 }
 
-func (e *cloneContext) remember(ptr any) {
-	e.ptrSeen[ptr] = struct{}{}
+func (g *stackOverflowGuard) remember(ptr any) {
+	g.ptrSeen[ptr] = struct{}{}
 }
 
-func (e *cloneContext) forget(ptr any) {
-	delete(e.ptrSeen, ptr)
+func (g *stackOverflowGuard) forget(ptr any) {
+	delete(g.ptrSeen, ptr)
 }
 
-func (e *cloneContext) checkPointerCycle(ptrFunc func(srcVal reflect.Value) any, cloner clonerFunc) clonerFunc {
-	return func(e *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
-		if e.forward(); e.isTooDeep() {
+func (g *stackOverflowGuard) checkPointerCycle(ptrFunc func(srcVal reflect.Value) any, cloner clonerFunc) clonerFunc {
+	return func(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+		if g.forward(); g.isTooDeep() {
 			ptr := ptrFunc(srcVal)
-			if e.isSeen(ptr) {
+			if g.isSeen(ptr) {
 				return newPointerCycleError(labels, srcVal.Type())
 			}
-			e.remember(ptr)
-			defer e.forget(ptr)
+			g.remember(ptr)
+			defer g.forget(ptr)
 		}
-		defer e.back()
-		return cloner(e, labels, tgtVal, srcVal, opts)
+		defer g.back()
+		return cloner(g, labels, tgtVal, srcVal, opts)
 	}
 }
 
 var cloneContextPool sync.Pool
 
-func newCloneContext() *cloneContext {
+func newCloneContext() *stackOverflowGuard {
 	if v := cloneContextPool.Get(); v != nil {
-		e := v.(*cloneContext)
-		if len(e.ptrSeen) > 0 {
+		g := v.(*stackOverflowGuard)
+		if len(g.ptrSeen) > 0 {
 			panic("pointerCloner.encode should have emptied ptrSeen via defers")
 		}
-		e.ptrLevel = 0
-		return e
+		g.ptrLevel = 0
+		return g
 	}
-	return &cloneContext{ptrSeen: make(map[any]struct{})}
+	return &stackOverflowGuard{ptrSeen: make(map[any]struct{})}
 }
 
-func freeCloneContext(ctx *cloneContext) {
+func freeCloneContext(ctx *stackOverflowGuard) {
 	cloneContextPool.Put(ctx)
 }

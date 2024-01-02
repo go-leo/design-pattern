@@ -1060,7 +1060,7 @@ func (t testGetter) Id() string {
 	return "id:" + t.id
 }
 
-func (t testGetter) Name() (string, error) {
+func (t testGetter) Name(ctx context.Context) (string, error) {
 	return "name:" + t.name, nil
 }
 
@@ -1075,8 +1075,9 @@ func (t *testSetter) SetAge(age int) {
 	t.age = age * 2
 }
 
-func (t *testSetter) SetAddress(address string) {
+func (t *testSetter) SetAddress(ctx context.Context, address string) error {
 	t.address = "china-" + address
+	return nil
 }
 
 func TestGetterSetterCloner(t *testing.T) {
@@ -1245,8 +1246,7 @@ func TestNestedGetSetterPointer(t *testing.T) {
 	}
 	var tgt testSetterPointerParent
 	err := prototype.Clone(&tgt, src, prototype.TagKey("prototype"), prototype.SetterPrefix("Set"))
-	var e prototype.Error
-	assert.ErrorAs(t, err, &e)
+	assert.NoError(t, err)
 
 	tgt = testSetterPointerParent{testSetter: new(testSetter)}
 	err = prototype.Clone(&tgt, src, prototype.TagKey("prototype"), prototype.SetterPrefix("Set"))
