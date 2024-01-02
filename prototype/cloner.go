@@ -289,6 +289,7 @@ stringCloner 克隆float类型
 string ----> ClonerFrom
 string ----> string
 string ----> []byte
+string ----> []rune
 string ----> any(string)
 string ----> bool(strconv.ParseBool)
 string ----> int(strconv.ParseInt)
@@ -320,6 +321,10 @@ func stringCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect
 	case reflect.Slice:
 		if tv.Type().Elem().Kind() == reflect.Uint8 {
 			tv.SetBytes([]byte(s))
+			return nil
+		}
+		if tv.Type().Elem().Kind() == reflect.Int32 {
+			tv.Set(reflect.ValueOf([]rune(s)))
 			return nil
 		}
 		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
@@ -465,11 +470,11 @@ func timeCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.V
 	case reflect.Interface:
 		return setAnyValue(g, labels, tv, srcVal, opts, t)
 	case reflect.String:
-		tv.SetString(t.Format(time.RFC3339))
+		tv.SetString(opts.TimeToString(t))
 		return nil
 	case reflect.Slice:
 		if tv.Type().Elem().Kind() == reflect.Uint8 {
-			tv.SetBytes([]byte(t.Format(time.RFC3339)))
+			tv.SetBytes([]byte(opts.TimeToString(t)))
 			return nil
 		}
 		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
@@ -507,11 +512,12 @@ func pointerCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflec
 	if srcVal.IsNil() {
 		return nil
 	}
+	srcVal = srcVal.Elem()
 	cloner := g.checkPointerCycle(
 		func(srcVal reflect.Value) any { return srcVal.Interface() },
-		typeCloner(srcVal.Type().Elem(), true, opts),
+		valueCloner(srcVal, opts),
 	)
-	return cloner(g, labels, tgtVal, srcVal.Elem(), opts)
+	return cloner(g, labels, tgtVal, srcVal, opts)
 }
 
 /*
@@ -524,12 +530,11 @@ slice ----> any(slice),
 slice ----> pointer,
 */
 func sliceCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	srcType := srcVal.Type()
-	if srcType.Elem().Kind() == reflect.Uint8 {
-		return bytesCloner(g, labels, tgtVal, srcVal, opts)
-	}
 	if srcVal.IsNil() {
 		return nil
+	}
+	if srcVal.Type().Elem().Kind() == reflect.Uint8 {
+		return bytesCloner(g, labels, tgtVal, srcVal, opts)
 	}
 	cloner := g.checkPointerCycle(
 		func(srcVal reflect.Value) any {
@@ -729,29 +734,13 @@ func structCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect
 }
 
 func unsupportedTypeCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	return hookCloner(g, labels, tgtVal, srcVal, opts)
-}
-
-func hookCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	valueHooks, ok := opts.ValueHook[srcVal]
-	if ok {
-		hook, ok := valueHooks[tgtVal]
-		if ok {
-			return hook(labels, tgtVal, srcVal)
+	for _, hook := range opts.Cloners {
+		ok, err := hook(labels, tgtVal, srcVal)
+		if err != nil {
+			return err
 		}
-	}
-	typeHooks, ok := opts.TypeHooks[srcVal.Type()]
-	if ok {
-		hook, ok := typeHooks[tgtVal.Type()]
 		if ok {
-			return hook(labels, tgtVal, srcVal)
-		}
-	}
-	kindHooks, ok := opts.KindHooks[srcVal.Kind()]
-	if ok {
-		hook, ok := kindHooks[tgtVal.Kind()]
-		if ok {
-			return hook(labels, tgtVal, srcVal)
+			return nil
 		}
 	}
 	return newUnsupportedTypeError(labels, srcVal.Type(), tgtVal.Type())

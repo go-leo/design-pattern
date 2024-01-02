@@ -633,7 +633,7 @@ func TestTimeCloner(t *testing.T) {
 	var tgtString string
 	err = prototype.Clone(&tgtString, srcTime)
 	assert.NoError(t, err)
-	assert.EqualValues(t, tgtString, srcTime.Format(time.RFC3339))
+	assert.EqualValues(t, tgtString, srcTime.Format(time.DateTime))
 
 	var tgtInt int
 	err = prototype.Clone(&tgtInt, srcTime)
@@ -1259,4 +1259,14 @@ func TestNestedGetSetterPointer(t *testing.T) {
 			address: "china-" + address,
 		},
 	}, tgt)
+}
+
+func TestRune(t *testing.T) {
+	s := "ssss"
+	t.Log([]int32(s))
+	t.Log([]byte(s))
+	bs := []byte("bsbs")
+	t.Log(string(bs))
+	//t.Log([]rune(bs))
+
 }

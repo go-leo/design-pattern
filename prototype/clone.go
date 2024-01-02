@@ -7,13 +7,10 @@ import (
 	"time"
 )
 
-// Hook is a hook.
-type Hook func(labels []string, tgtVal reflect.Value, srcVal reflect.Value) error
+// Cloner is a clone hook.
+type Cloner func(labels []string, tgtVal reflect.Value, srcVal reflect.Value) (bool, error)
 
 type options struct {
-	ValueHook    map[reflect.Value]map[reflect.Value]Hook
-	TypeHooks    map[reflect.Type]map[reflect.Type]Hook
-	KindHooks    map[reflect.Kind]map[reflect.Kind]Hook
 	TagKey       string
 	DeepClone    bool
 	EqualFold    func(t, s string) bool
@@ -24,6 +21,7 @@ type options struct {
 	GetterPrefix string
 	SetterPrefix string
 	Context      context.Context
+	Cloners      []Cloner
 }
 
 func (o *options) apply(opts ...Option) *options {
@@ -78,6 +76,12 @@ func SetterPrefix(p string) Option {
 func Context(ctx context.Context) Option {
 	return func(o *options) {
 		o.Context = ctx
+	}
+}
+
+func Cloners(f ...Cloner) Option {
+	return func(o *options) {
+		o.Cloners = append(o.Cloners, f...)
 	}
 }
 
