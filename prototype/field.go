@@ -1,6 +1,7 @@
 package prototype
 
 import (
+	"github.com/go-leo/gox/slicex"
 	"golang.org/x/exp/slices"
 	"reflect"
 	"strings"
@@ -387,7 +388,7 @@ func (f *_FieldInfo) TypeMatch(field *_FieldInfo, opts *options) bool {
 type _FieldInfos []*_FieldInfo
 
 func (fs _FieldInfos) Sort(opts *options) {
-	slices.SortFunc(fs, func(a, b *_FieldInfo) bool {
+	slicex.SortFunc(fs, func(a, b *_FieldInfo) bool {
 		// 深度越浅越优先
 		if len(a.Indexes) != len(b.Indexes) {
 			return len(a.Indexes) < len(b.Indexes)
@@ -419,7 +420,7 @@ func (fs _FieldInfos) SortForFuzzyMatch(field *_FieldInfo, opts *options) {
 	less := func(a, b *_FieldInfo) bool {
 		return a.FuzzyMatch(field, opts, a.LabelsMatch, a.NamesMatch, a.ParentMatch, a.TypeMatch) > b.FuzzyMatch(field, opts, b.LabelsMatch, b.NamesMatch, b.ParentMatch, b.TypeMatch)
 	}
-	slices.SortFunc(fs, less)
+	slicex.SortFunc(fs, less)
 }
 
 func (fs _FieldInfos) FindValueByField(field *_FieldInfo, opts *options) *_FieldInfo {
@@ -561,7 +562,7 @@ type _MapEntry struct {
 type _MapEntries []_MapEntry
 
 func (s _MapEntries) Sort() {
-	slices.SortFunc(s, func(a, b _MapEntry) bool {
+	slicex.SortFunc(s, func(a, b _MapEntry) bool {
 		if a.ValType.Kind() != b.ValType.Kind() {
 			return _KindOrder[a.ValType.Kind()] < _KindOrder[b.ValType.Kind()]
 		}
