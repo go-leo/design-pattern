@@ -691,10 +691,11 @@ func structCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect
 
 	case anyPBAnyType:
 		if srcVal.CanAddr() {
-			srcPtr := srcVal.Addr().Interface().(*anypb.Any)
+			srcVal = srcVal.Addr()
+			srcPtr := srcVal.Interface().(*anypb.Any)
 			message, err := srcPtr.UnmarshalNew()
 			if err != nil {
-				return newUnmarshalNewError(labels, srcVal.Type(), err)
+				return newUnmarshalNewError(labels, tgtVal.Type(), srcVal.Type(), err)
 			}
 			return interfaceCloner(g, labels, tgtVal, reflect.ValueOf(message), opts)
 		}
@@ -760,5 +761,5 @@ func unsupportedTypeCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVa
 			return nil
 		}
 	}
-	return newUnsupportedTypeError(labels, srcVal.Type(), tgtVal.Type())
+	return newUnsupportedTypeError(labels, tgtVal.Type(), srcVal.Type())
 }

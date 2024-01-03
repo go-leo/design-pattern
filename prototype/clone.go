@@ -97,10 +97,10 @@ func Clone(tgt any, src any, opts ...Option) error {
 	tgtVal := reflect.ValueOf(tgt)
 	// 如果目标不是一个指针或者为nil，返回错误
 	if tgtVal.Kind() != reflect.Pointer {
-		return newNonPointerError(reflect.TypeOf(tgt))
+		return newNonPointerError(reflect.TypeOf(tgt), reflect.TypeOf(src))
 	}
 	if tgtVal.IsNil() {
-		return newNilError(reflect.TypeOf(tgt))
+		return newNilError(reflect.TypeOf(tgt), reflect.TypeOf(src))
 	}
 
 	// 获取原值的反射值
