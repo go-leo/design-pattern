@@ -1,7 +1,6 @@
 package prototype
 
 import (
-	"github.com/go-leo/gox/slicex"
 	"golang.org/x/exp/slices"
 	"reflect"
 	"strings"
@@ -388,39 +387,43 @@ func (f *_FieldInfo) TypeMatch(field *_FieldInfo, opts *options) bool {
 type _FieldInfos []*_FieldInfo
 
 func (fs _FieldInfos) Sort(opts *options) {
-	slicex.SortFunc(fs, func(a, b *_FieldInfo) bool {
+	slices.SortFunc(fs, func(a, b *_FieldInfo) int {
 		// 深度越浅越优先
 		if len(a.Indexes) != len(b.Indexes) {
-			return len(a.Indexes) < len(b.Indexes)
+			return len(a.Indexes) - len(b.Indexes)
 		}
 		// 打上标签的优先
 		if a.Tagged != b.Tagged {
-			return a.Tagged
+			if a.Tagged {
+				return -1
+			} else {
+				return 1
+			}
 		}
 		// 标签名与字段名相同的优先
 		if strings.EqualFold(a.Name, a.Label) {
-			return true
+			return -1
 		}
 		if strings.EqualFold(b.Name, b.Label) {
-			return false
+			return 1
 		}
 		// 字段index越小越优先
 		for i, aIndex := range a.Indexes {
 			bIndex := b.Indexes[i]
 			if aIndex != bIndex {
-				return aIndex < bIndex
+				return aIndex - bIndex
 			}
 		}
 		// 字段类型越基础有优先
-		return _KindOrder[a.Type.Kind()] < _KindOrder[b.Type.Kind()]
+		return _KindOrder[a.Type.Kind()] - _KindOrder[b.Type.Kind()]
 	})
 }
 
 func (fs _FieldInfos) SortForFuzzyMatch(field *_FieldInfo, opts *options) {
-	less := func(a, b *_FieldInfo) bool {
-		return a.FuzzyMatch(field, opts, a.LabelsMatch, a.NamesMatch, a.ParentMatch, a.TypeMatch) > b.FuzzyMatch(field, opts, b.LabelsMatch, b.NamesMatch, b.ParentMatch, b.TypeMatch)
+	less := func(a, b *_FieldInfo) int {
+		return b.FuzzyMatch(field, opts, b.LabelsMatch, b.NamesMatch, b.ParentMatch, b.TypeMatch) - a.FuzzyMatch(field, opts, a.LabelsMatch, a.NamesMatch, a.ParentMatch, a.TypeMatch)
 	}
-	slicex.SortFunc(fs, less)
+	slices.SortFunc(fs, less)
 }
 
 func (fs _FieldInfos) FindValueByField(field *_FieldInfo, opts *options) *_FieldInfo {
@@ -562,11 +565,11 @@ type _MapEntry struct {
 type _MapEntries []_MapEntry
 
 func (s _MapEntries) Sort() {
-	slicex.SortFunc(s, func(a, b _MapEntry) bool {
+	slices.SortFunc(s, func(a, b _MapEntry) int {
 		if a.ValType.Kind() != b.ValType.Kind() {
-			return _KindOrder[a.ValType.Kind()] < _KindOrder[b.ValType.Kind()]
+			return _KindOrder[a.ValType.Kind()] - _KindOrder[b.ValType.Kind()]
 		}
-		return strings.Compare(a.Label, b.Label) < 0
+		return strings.Compare(a.Label, b.Label)
 	})
 }
 

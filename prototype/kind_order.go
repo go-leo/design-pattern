@@ -3,7 +3,7 @@ package prototype
 import "reflect"
 
 const (
-	_ uint = iota
+	_ int = iota
 	_Bool
 	_Int
 	_Int8
@@ -33,7 +33,7 @@ const (
 	_Invalid
 )
 
-var _KindOrder = map[reflect.Kind]uint{
+var _KindOrder = map[reflect.Kind]int{
 	reflect.Invalid:       _Invalid,
 	reflect.Bool:          _Bool,
 	reflect.Int:           _Int,
