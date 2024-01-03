@@ -3,7 +3,6 @@ package prototype
 import (
 	"encoding"
 	"encoding/base64"
-	"fmt"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -357,7 +356,6 @@ func stringCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect
 		return nil
 	}
 	s := srcVal.String()
-	fmt.Println("stringCloner:", tgtVal.Type())
 	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
 		ok, err := cloner.CloneFrom(s)

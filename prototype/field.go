@@ -197,14 +197,15 @@ type _StructInfos []*_StructInfo
 
 type _FieldInfo struct {
 	reflect.StructField
-	Parent        *_StructInfo
-	Indexes       []int
-	Names         []string
-	Tagged        bool
-	Ignored       bool
-	Label         string
-	Labels        []string
-	Options       []string
+	Parent    *_StructInfo
+	Indexes   []int
+	Names     []string
+	Tagged    bool
+	Ignored   bool
+	Label     string
+	Labels    []string
+	OmitEmpty bool
+	//Options       []string
 	BaseGetter    string
 	BaseSetter    string
 	PointerGetter string
@@ -242,7 +243,8 @@ func (f *_FieldInfo) Analysis(opts *options) *_FieldInfo {
 		f.Tagged = false
 		f.Label = f.Name
 		f.Labels = []string{f.Label}
-		f.Options = []string{}
+		f.OmitEmpty = false
+		//f.Options = []string{}
 		return f
 	}
 	// 以","分割value，
@@ -250,7 +252,7 @@ func (f *_FieldInfo) Analysis(opts *options) *_FieldInfo {
 	f.Tagged = true
 	f.Label = values[0]
 	f.Labels = []string{f.Label}
-	f.Options = slices.Clone(values[1:])
+	f.OmitEmpty = slices.Contains(values[1:], "omitempty")
 	return f
 }
 
@@ -260,11 +262,11 @@ func (f *_FieldInfo) Clone() *_FieldInfo {
 		Parent:        f.Parent,
 		Indexes:       slices.Clone(f.Indexes),
 		Names:         slices.Clone(f.Names),
-		Labels:        slices.Clone(f.Labels),
 		Tagged:        f.Tagged,
 		Ignored:       f.Ignored,
 		Label:         f.Label,
-		Options:       f.Options,
+		Labels:        slices.Clone(f.Labels),
+		OmitEmpty:     f.OmitEmpty,
 		BaseGetter:    f.BaseGetter,
 		BaseSetter:    f.BaseSetter,
 		PointerGetter: f.PointerGetter,
@@ -336,10 +338,6 @@ func (f *_FieldInfo) SetValue(s *_StructInfo, structVal reflect.Value, opts *opt
 	}
 	// 方法
 	return methodInfo.InvokeSetter(parentVal, inVal, opts)
-}
-
-func (f *_FieldInfo) ContainsOption(option string) bool {
-	return slices.Contains(f.Options, option)
 }
 
 func (f *_FieldInfo) FuzzyMatch(field *_FieldInfo, opts *options, matchers ...func(field *_FieldInfo, opts *options) bool) int {

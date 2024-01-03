@@ -950,6 +950,9 @@ func setStructToAny(g *stackOverflowGuard, labels []string, tgtVal, srcVal refle
 		if !srcFieldVal.IsValid() {
 			return nil
 		}
+		if srcField.OmitEmpty && srcFieldVal.IsZero() {
+			return nil
+		}
 
 		var tgtEntryVal any
 		cloner := typeCloner(srcFieldVal.Type(), true, opts)
@@ -984,6 +987,9 @@ func setStructToMap(g *stackOverflowGuard, labels []string, tgtVal, srcVal refle
 			return err
 		}
 		if !srcFieldVal.IsValid() {
+			return nil
+		}
+		if srcField.OmitEmpty && srcFieldVal.IsZero() {
 			return nil
 		}
 		cloner := typeCloner(srcFieldVal.Type(), true, opts)
@@ -1037,6 +1043,10 @@ func setStructToStruct(g *stackOverflowGuard, labels []string, tgtVal, srcVal re
 		if !srcFieldVal.IsValid() {
 			return nil
 		}
+		if srcField.OmitEmpty && srcFieldVal.IsZero() {
+			return nil
+		}
+
 		tgtField := tgtStruct.FindFieldByField(srcField, opts)
 		if tgtField == nil {
 			return nil
@@ -1053,6 +1063,7 @@ func setStructToStruct(g *stackOverflowGuard, labels []string, tgtVal, srcVal re
 			return nil
 		}
 		tgtFields[tgtField] = struct{}{}
+
 		srcField := srcStruct.FindFieldByField(tgtField, opts)
 		if srcField == nil {
 			return nil
@@ -1064,6 +1075,10 @@ func setStructToStruct(g *stackOverflowGuard, labels []string, tgtVal, srcVal re
 		if !srcFieldVal.IsValid() {
 			return nil
 		}
+		if srcField.OmitEmpty && srcFieldVal.IsZero() {
+			return nil
+		}
+
 		return tgtField.SetValue(tgtStruct, tgtVal, opts, setFunc(g, append(slices.Clone(labels), label), srcFieldVal, opts))
 	}
 	return tgtStruct.RangeAllFields(tgtFunc)
