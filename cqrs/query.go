@@ -11,13 +11,13 @@ type QueryHandler[Q any, R any] interface {
 	Handle(ctx context.Context, q Q) (R, error)
 }
 
-// The QueryHandlerFunc type is an adapter to allow the use of ordinary functions as QueryHandler.
-type QueryHandlerFunc[Q any, R any] struct {
+// The queryHandlerFunc type is an adapter to allow the use of ordinary functions as QueryHandler.
+type queryHandlerFunc[Q any, R any] struct {
 	f func(ctx context.Context, q Q) (R, error)
 }
 
 // Handle calls f(ctx).
-func (f QueryHandlerFunc[Q, R]) Handle(ctx context.Context, q Q) (R, error) {
+func (f queryHandlerFunc[Q, R]) Handle(ctx context.Context, q Q) (R, error) {
 	return f.f(ctx, q)
 }
 
@@ -27,4 +27,8 @@ type NoopQuery[Q any, R any] struct{}
 func (NoopQuery[Q, R]) Invoke(context.Context, Q) (R, error) {
 	var r R
 	return r, nil
+}
+
+func CommandHandlerFunc[Q any, R any](f func(ctx context.Context, q Q) (R, error)) QueryHandler[Q, R] {
+	return &queryHandlerFunc[Q, R]{f: f}
 }

@@ -12,20 +12,19 @@ var (
 	ErrNotRedoCommand = errors.New("not implement RedoCommand interface")
 )
 
-// A Command encapsulates a unit of processing work to be performed.
-type Command interface {
-	// Execute a unit of processing work to be performed
-	Execute(ctx context.Context) (context.Context, error)
+// Handler is a command handler that to encapsulate a unit of processing work to be performed.
+type Handler[C any] interface {
+	Handle(ctx context.Context, cmd C) error
 }
 
-// UndoCommand undo a Command
-type UndoCommand interface {
-	Undo(ctx context.Context) (context.Context, error)
+// UndoHandler undo a Command
+type UndoHandler[C any] interface {
+	Handle(ctx context.Context, cmd C) error
 }
 
-// RedoCommand redo a Command
-type RedoCommand interface {
-	Redo(ctx context.Context) (context.Context, error)
+// RedoHandler redo a Command
+type RedoHandler[C any] interface {
+	Handle(ctx context.Context, cmd C) error
 }
 
 // The CommandFunc type is an adapter to allow the use of ordinary functions as Command.

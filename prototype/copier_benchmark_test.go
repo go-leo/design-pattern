@@ -1,0 +1,56 @@
+package prototype_test
+
+//
+//import (
+//	"encoding/json"
+//	"github.com/go-leo/design-pattern/prototype"
+//	"testing"
+//)
+//
+//func BenchmarkCopyStruct(b *testing.B) {
+//	var fakeAge int32 = 12
+//	user := User{Name: "Jinzhu", Nickname: "jinzhu", Age: 18, FakeAge: &fakeAge, Role: "Admin", Notes: []string{"hello world", "welcome"}, flags: []byte{'x'}}
+//	for x := 0; x < b.N; x++ {
+//		prototype.Clone(&Employee{}, &user)
+//	}
+//}
+//
+//func BenchmarkCopyStructFields(b *testing.B) {
+//	var fakeAge int32 = 12
+//	user := User{Name: "Jinzhu", Nickname: "jinzhu", Age: 18, FakeAge: &fakeAge, Role: "Admin", Notes: []string{"hello world", "welcome"}, flags: []byte{'x'}}
+//	for x := 0; x < b.N; x++ {
+//		prototype.Clone(&Employee{}, &user)
+//	}
+//}
+//
+//func BenchmarkNamaCopy(b *testing.B) {
+//	var fakeAge int32 = 12
+//	user := User{Name: "Jinzhu", Nickname: "jinzhu", Age: 18, FakeAge: &fakeAge, Role: "Admin", Notes: []string{"hello world", "welcome"}, flags: []byte{'x'}}
+//	for x := 0; x < b.N; x++ {
+//		employee := &Employee{
+//			Name:      user.Name,
+//			NickName:  &user.Nickname,
+//			Age:       int64(user.Age),
+//			FakeAge:   int(*user.FakeAge),
+//			DoubleAge: user.DoubleAge(),
+//		}
+//
+//		for _, note := range user.Notes {
+//			employee.Notes = append(employee.Notes, &note)
+//		}
+//		employee.Role(user.Role)
+//	}
+//}
+//
+//func BenchmarkJsonMarshalCopy(b *testing.B) {
+//	var fakeAge int32 = 12
+//	user := User{Name: "Jinzhu", Nickname: "jinzhu", Age: 18, FakeAge: &fakeAge, Role: "Admin", Notes: []string{"hello world", "welcome"}, flags: []byte{'x'}}
+//	for x := 0; x < b.N; x++ {
+//		data, _ := json.Marshal(user)
+//		var employee Employee
+//		json.Unmarshal(data, &employee)
+//
+//		employee.DoubleAge = user.DoubleAge()
+//		employee.Role(user.Role)
+//	}
+//}
