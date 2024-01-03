@@ -3,6 +3,7 @@ package prototype
 import (
 	"encoding"
 	"encoding/base64"
+	"fmt"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -33,7 +34,11 @@ func typeCloner(srcType reflect.Type, allowAddr bool, opts *options) clonerFunc 
 	if srcType.Implements(clonerToType) {
 		return clonerToCloner
 	}
-	switch srcType.Kind() {
+	return kindCloner(srcType.Kind(), opts)
+}
+
+func kindCloner(srcKind reflect.Kind, opts *options) clonerFunc {
+	switch srcKind {
 	case reflect.Bool:
 		return boolCloner
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -68,16 +73,26 @@ func clonerToCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal refle
 	}
 	cloner, ok := srcVal.Interface().(ClonerTo)
 	if !ok {
-		return typeCloner(srcVal.Type(), false, opts)(g, labels, tgtVal, srcVal, opts)
+		return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
 	}
+	var tgtPtr any
 	if tgtVal.Kind() == reflect.Pointer {
-		return cloner.CloneTo(tgtVal.Interface())
+		tgtPtr = tgtVal.Interface()
 	}
 	if tgtVal.CanAddr() {
-		tgtAddr := tgtVal.Addr()
-		return cloner.CloneTo(tgtAddr.Interface())
+		tgtPtr = tgtVal.Addr().Interface()
 	}
-	return typeCloner(srcVal.Type(), false, opts)(g, labels, tgtVal, srcVal, opts)
+	if tgtPtr == nil {
+		return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
+	}
+	ok, err := cloner.CloneTo(tgtPtr)
+	if err != nil {
+		return err
+	}
+	if ok {
+		return nil
+	}
+	return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
 }
 
 // addrClonerToCloner 实现了 ClonerTo 接口，直接调用
@@ -94,13 +109,24 @@ func addrClonerToCloner() clonerFunc {
 		if !ok {
 			return typeCloner(srcVal.Type(), false, opts)(g, labels, tgtVal, srcVal, opts)
 		}
+		var tgtPtr any
 		if tgtVal.Kind() == reflect.Pointer {
-			return cloner.CloneTo(tgtVal.Interface())
+			tgtPtr = tgtVal.Interface()
 		}
 		if tgtVal.CanAddr() {
-			return cloner.CloneTo(tgtVal.Addr().Interface())
+			tgtPtr = tgtVal.Addr().Interface()
 		}
-		return typeCloner(srcVal.Type(), false, opts)(g, labels, tgtVal, srcVal, opts)
+		if tgtPtr == nil {
+			return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
+		}
+		ok, err := cloner.CloneTo(tgtPtr)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
 	}
 }
 
@@ -123,7 +149,14 @@ func boolCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.V
 	b := srcVal.Bool()
 	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
-		return cloner.CloneFrom(b)
+		ok, err := cloner.CloneFrom(b)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		tv = indirectValue(tv)
 	}
 	switch tv.Kind() {
 	case reflect.Bool:
@@ -168,7 +201,14 @@ func intCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Va
 	i := srcVal.Int()
 	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
-		return cloner.CloneFrom(i)
+		ok, err := cloner.CloneFrom(i)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		tv = indirectValue(tv)
 	}
 	switch tv.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -213,7 +253,14 @@ func uintCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.V
 	u := srcVal.Uint()
 	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
-		return cloner.CloneFrom(u)
+		ok, err := cloner.CloneFrom(u)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		tv = indirectValue(tv)
 	}
 	switch tv.Kind() {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
@@ -258,7 +305,14 @@ func floatCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.
 	f := srcVal.Float()
 	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
-		return cloner.CloneFrom(f)
+		ok, err := cloner.CloneFrom(f)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		tv = indirectValue(tv)
 	}
 	switch tv.Kind() {
 	case reflect.Float32, reflect.Float64:
@@ -303,9 +357,17 @@ func stringCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect
 		return nil
 	}
 	s := srcVal.String()
+	fmt.Println("stringCloner:", tgtVal.Type())
 	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
-		return cloner.CloneFrom(s)
+		ok, err := cloner.CloneFrom(s)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		tv = indirectValue(tv)
 	}
 
 	if reflect.PointerTo(tv.Type()).Implements(textUnmarshalerType) && tv.CanAddr() {
@@ -384,7 +446,14 @@ func bytesCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.
 	bs := srcVal.Bytes()
 	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
-		return cloner.CloneFrom(bs)
+		ok, err := cloner.CloneFrom(bs)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		tv = indirectValue(tv)
 	}
 
 	if reflect.PointerTo(tv.Type()).Implements(textUnmarshalerType) && tv.CanAddr() {
@@ -460,9 +529,17 @@ func timeCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.V
 		return nil
 	}
 	t := srcVal.Interface().(time.Time)
+
 	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
-		return cloner.CloneFrom(t)
+		ok, err := cloner.CloneFrom(t)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		tv = indirectValue(tv)
 	}
 	switch tv.Kind() {
 	case reflect.Struct:
@@ -582,7 +659,14 @@ func arrayCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.
 	}
 	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
-		return cloner.CloneFrom(srcVal.Interface())
+		ok, err := cloner.CloneFrom(srcVal.Interface())
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		tv = indirectValue(tv)
 	}
 	switch tv.Kind() {
 	case reflect.Array, reflect.Slice:
@@ -610,7 +694,14 @@ func mapCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Va
 func _mapCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
-		return cloner.CloneFrom(srcVal.Interface())
+		ok, err := cloner.CloneFrom(srcVal.Interface())
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+		tv = indirectValue(tv)
 	}
 
 	switch tv.Kind() {
@@ -667,7 +758,7 @@ func structCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect
 	case sqlNullStringType:
 		return stringCloner(g, labels, tgtVal, srcVal.FieldByName("String"), opts)
 	case sqlNullTimeType:
-		return timeCloner(g, labels, tgtVal, srcVal.FieldByName("IntToTime"), opts)
+		return timeCloner(g, labels, tgtVal, srcVal.FieldByName("Time"), opts)
 
 	case timestampPBTimestampType:
 		timestamp, _ := srcVal.Interface().(timestamppb.Timestamp)
@@ -733,7 +824,14 @@ func structCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect
 	default:
 		cloner, tv := indirect(tgtVal)
 		if cloner != nil {
-			return cloner.CloneFrom(srcVal.Interface())
+			ok, err := cloner.CloneFrom(srcVal.Interface())
+			if err != nil {
+				return err
+			}
+			if ok {
+				return nil
+			}
+			tv = indirectValue(tv)
 		}
 
 		switch tv.Kind() {

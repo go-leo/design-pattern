@@ -41,6 +41,9 @@ func stringify(v reflect.Value) (string, error) {
 }
 
 func indirect(v reflect.Value) (ClonerFrom, reflect.Value) {
+	if v.CanAddr() {
+		v = v.Addr()
+	}
 	for {
 		if v.Type().NumMethod() > 0 && v.CanInterface() {
 			if c, ok := v.Interface().(ClonerFrom); ok {

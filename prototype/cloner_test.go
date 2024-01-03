@@ -24,22 +24,28 @@ import (
 
 type testClonerFromString string
 
-func (s *testClonerFromString) CloneFrom(src any) error {
+func (s *testClonerFromString) CloneFrom(src any) (bool, error) {
 	switch v := src.(type) {
 	case nil:
 		*s = "nil"
+		return true, nil
 	case bool:
 		*s = testClonerFromString(strconv.FormatBool(v))
+		return true, nil
 	case int64:
 		*s = testClonerFromString(strconv.FormatInt(v, 10))
+		return true, nil
 	case uint64:
 		*s = testClonerFromString(strconv.FormatUint(v, 10))
+		return true, nil
 	case float64:
 		*s = testClonerFromString(strconv.FormatFloat(v, 'g', -1, 64))
+		return true, nil
 	case string:
 		*s = testClonerFromString(v)
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 func TestClonerFrom(t *testing.T) {
@@ -87,38 +93,44 @@ func TestClonerFrom(t *testing.T) {
 
 type testClonerToString string
 
-func (s *testClonerToString) CloneTo(tgt any) error {
+func (s *testClonerToString) CloneTo(tgt any) (bool, error) {
 	switch tgt := tgt.(type) {
 	case *bool:
 		b, err := strconv.ParseBool(string(*s))
 		if err != nil {
-			return err
+			return false, err
 		}
 		*tgt = b
+		return true, nil
 	case *int64:
 		i, err := strconv.ParseInt(string(*s), 10, 64)
 		if err != nil {
-			return err
+			return false, err
 		}
 		*tgt = i
+		return true, nil
 	case *uint64:
 		u, err := strconv.ParseUint(string(*s), 10, 64)
 		if err != nil {
-			return err
+			return false, err
 		}
 		*tgt = u
+		return true, nil
 	case *float64:
 		f, err := strconv.ParseFloat(string(*s), 64)
 		if err != nil {
-			return err
+			return false, err
 		}
 		*tgt = f
+		return true, nil
 	case *string:
 		*tgt = string(*s)
+		return true, nil
 	case *testClonerToString:
 		*tgt = *s
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 type testClonerToStruct struct {
