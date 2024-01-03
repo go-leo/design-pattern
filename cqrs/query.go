@@ -28,7 +28,3 @@ func (NoopQuery[Q, R]) Invoke(context.Context, Q) (R, error) {
 	var r R
 	return r, nil
 }
-
-func CommandHandlerFunc[Q any, R any](f func(ctx context.Context, q Q) (R, error)) QueryHandler[Q, R] {
-	return &queryHandlerFunc[Q, R]{f: f}
-}
