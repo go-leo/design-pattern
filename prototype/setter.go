@@ -71,7 +71,7 @@ func setFloat2Uint(labels []string, tgtVal reflect.Value, f float64) error {
 	return setUint(labels, tgtVal, uint64(f))
 }
 
-func setPointer(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
+func setPointer(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsNil() {
 		return valueCloner(srcVal, opts)(g, labels, tgtVal, srcVal, opts)
 	}
@@ -79,7 +79,7 @@ func setPointer(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, sr
 	return valueCloner(srcVal, opts)(g, labels, tgtVal, srcVal, opts)
 }
 
-func setAnyValue(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, i any) error {
+func setAnyValue(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, i any) error {
 	if tgtVal.NumMethod() > 0 {
 		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
@@ -87,7 +87,7 @@ func setAnyValue(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, s
 	return nil
 }
 
-func setScanner(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, v any) error {
+func setScanner(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, v any) error {
 	if !tgtVal.CanAddr() {
 		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
@@ -95,7 +95,7 @@ func setScanner(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, sr
 	return scanner.Scan(v)
 }
 
-func setAnyProtoBuf(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, v proto.Message) error {
+func setAnyProtoBuf(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, v proto.Message) error {
 	if !tgtVal.CanAddr() {
 		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
@@ -103,7 +103,7 @@ func setAnyProtoBuf(g *stackOverflowGuard, labels []string, tgtVal reflect.Value
 	return anypb.MarshalFrom(tgtPtr, v, proto.MarshalOptions{})
 }
 
-func setBoolToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, b bool) error {
+func setBoolToStruct(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, b bool) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case sqlNullBoolType:
@@ -154,7 +154,7 @@ func setBoolToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Valu
 	}
 }
 
-func setIntToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, i int64) error {
+func setIntToStruct(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, i int64) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case sqlNullInt16Type:
@@ -257,7 +257,7 @@ func setIntToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value
 	}
 }
 
-func setUintToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, u uint64) error {
+func setUintToStruct(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, u uint64) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case sqlNullByteType:
@@ -360,7 +360,7 @@ func setUintToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Valu
 	}
 }
 
-func setFloatToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, f float64) error {
+func setFloatToStruct(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, f float64) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case sqlNullFloat64Type:
@@ -482,7 +482,7 @@ func setFloatToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Val
 	}
 }
 
-func setStringToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, s string) error {
+func setStringToStruct(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, s string) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case sqlNullStringType:
@@ -665,7 +665,7 @@ func setStringToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Va
 	}
 }
 
-func setBytesToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, bs []byte) error {
+func setBytesToStruct(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, bs []byte) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case wrappersPBBytesType:
@@ -688,7 +688,7 @@ func setBytesToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Val
 	}
 }
 
-func setTimeToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, t time.Time) error {
+func setTimeToStruct(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options, t time.Time) error {
 	tgtType := tgtVal.Type()
 	switch tgtType {
 	case timeType:
@@ -798,7 +798,7 @@ func setTimeToStruct(g *stackOverflowGuard, labels []string, tgtVal reflect.Valu
 	}
 }
 
-func setSliceArray(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
+func setSliceArray(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
 	srcLen := srcVal.Len()
 	if tgtVal.Kind() == reflect.Slice {
 		tgtVal.Set(reflect.MakeSlice(tgtVal.Type(), srcLen, srcLen))
@@ -814,7 +814,7 @@ func setSliceArray(g *stackOverflowGuard, labels []string, tgtVal reflect.Value,
 	return nil
 }
 
-func setAnySlice(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
+func setAnySlice(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
 	if tgtVal.NumMethod() > 0 {
 		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
@@ -833,7 +833,7 @@ func setAnySlice(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, s
 	return nil
 }
 
-func setMapToMap(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
+func setMapToMap(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
 	tgtType := tgtVal.Type()
 	if tgtVal.IsNil() {
 		tgtVal.Set(reflect.MakeMap(tgtType))
@@ -876,7 +876,7 @@ func setMapToMap(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, s
 	return nil
 }
 
-func setMapToAny(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
+func setMapToAny(g *cloneContext, labels []string, tgtVal reflect.Value, srcVal reflect.Value, opts *options) error {
 	if tgtVal.NumMethod() > 0 {
 		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
@@ -910,13 +910,13 @@ func setMapToAny(g *stackOverflowGuard, labels []string, tgtVal reflect.Value, s
 	return nil
 }
 
-func setMapToStruct(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func setMapToStruct(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	srcValCloner := typeCloner(srcVal.Type().Elem(), true, opts)
 	srcEntries, err := newMapEntries(srcVal.MapRange())
 	if err != nil {
 		return err
 	}
-	setFunc := func(g *stackOverflowGuard, labels []string, srcVal reflect.Value, opts *options) func(in reflect.Value) error {
+	setFunc := func(g *cloneContext, labels []string, srcVal reflect.Value, opts *options) func(in reflect.Value) error {
 		return func(tgtVal reflect.Value) error {
 			return srcValCloner(g, labels, tgtVal, srcVal, opts)
 		}
@@ -935,7 +935,7 @@ func setMapToStruct(g *stackOverflowGuard, labels []string, tgtVal, srcVal refle
 	return nil
 }
 
-func setStructToAny(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func setStructToAny(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if tgtVal.NumMethod() > 0 {
 		return unsupportedTypeCloner(g, labels, tgtVal, srcVal, opts)
 	}
@@ -970,7 +970,7 @@ func setStructToAny(g *stackOverflowGuard, labels []string, tgtVal, srcVal refle
 	return nil
 }
 
-func setStructToMap(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func setStructToMap(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	tgtType := tgtVal.Type()
 	tgtKeyType := tgtType.Key()
 	tgtValType := tgtType.Elem()
@@ -1019,14 +1019,14 @@ func setStructToMap(g *stackOverflowGuard, labels []string, tgtVal, srcVal refle
 	return err
 }
 
-func setStructToStruct(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func setStructToStruct(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	srcType := srcVal.Type()
 	srcStruct := _CachedStructInfo(srcType, opts)
 
 	tgtType := tgtVal.Type()
 	tgtStruct := _CachedStructInfo(tgtType, opts)
 
-	setFunc := func(g *stackOverflowGuard, labels []string, srcVal reflect.Value, opts *options) func(in reflect.Value) error {
+	setFunc := func(g *cloneContext, labels []string, srcVal reflect.Value, opts *options) func(in reflect.Value) error {
 		return func(tgtVal reflect.Value) error {
 			cloner := valueCloner(srcVal, opts)
 			return cloner(g, labels, tgtVal, srcVal, opts)

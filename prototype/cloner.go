@@ -13,12 +13,12 @@ import (
 )
 
 // clonerFunc 通用克隆方法
-type clonerFunc func(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error
+type clonerFunc func(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error
 
 // valueCloner 基于 reflect.Value 获取 clonerFunc
 func valueCloner(srcVal reflect.Value, opts *options) clonerFunc {
 	if !srcVal.IsValid() {
-		return func(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+		return func(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 			return nil
 		}
 	}
@@ -65,44 +65,18 @@ func kindCloner(srcKind reflect.Kind, opts *options) clonerFunc {
 	}
 }
 
-// clonerToCloner 实现了 ClonerTo 接口，直接调用
-func clonerToCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
-	if srcVal.Kind() == reflect.Pointer && srcVal.IsNil() {
-		return nil
-	}
-	cloner, ok := srcVal.Interface().(ClonerTo)
-	if !ok {
-		return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
-	}
-	var tgtPtr any
-	if tgtVal.Kind() == reflect.Pointer {
-		tgtPtr = tgtVal.Interface()
-	}
-	if tgtVal.CanAddr() {
-		tgtPtr = tgtVal.Addr().Interface()
-	}
-	if tgtPtr == nil {
-		return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
-	}
-	ok, err := cloner.CloneTo(tgtPtr)
-	if err != nil {
-		return err
-	}
-	if ok {
-		return nil
-	}
-	return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
-}
-
 // addrClonerToCloner 实现了 ClonerTo 接口，直接调用
 func addrClonerToCloner() clonerFunc {
-	return func(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	return func(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 		if !srcVal.CanAddr() {
 			return typeCloner(srcVal.Type(), false, opts)(g, labels, tgtVal, srcVal, opts)
 		}
 		srcAddr := srcVal.Addr()
 		if srcAddr.IsNil() {
 			return nil
+		}
+		if !srcAddr.CanInterface() {
+			return typeCloner(srcVal.Type(), false, opts)(g, labels, tgtVal, srcVal, opts)
 		}
 		cloner, ok := srcAddr.Interface().(ClonerTo)
 		if !ok {
@@ -111,11 +85,9 @@ func addrClonerToCloner() clonerFunc {
 		var tgtPtr any
 		if tgtVal.Kind() == reflect.Pointer {
 			tgtPtr = tgtVal.Interface()
-		}
-		if tgtVal.CanAddr() {
+		} else if tgtVal.CanAddr() {
 			tgtPtr = tgtVal.Addr().Interface()
-		}
-		if tgtPtr == nil {
+		} else {
 			return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
 		}
 		ok, err := cloner.CloneTo(tgtPtr)
@@ -127,6 +99,36 @@ func addrClonerToCloner() clonerFunc {
 		}
 		return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
 	}
+}
+
+// clonerToCloner 实现了 ClonerTo 接口，直接调用
+func clonerToCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+	if srcVal.Kind() == reflect.Pointer && srcVal.IsNil() {
+		return nil
+	}
+	if !srcVal.CanInterface() {
+		return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
+	}
+	cloner, ok := srcVal.Interface().(ClonerTo)
+	if !ok {
+		return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
+	}
+	var tgtPtr any
+	if tgtVal.Kind() == reflect.Pointer && tgtVal.CanInterface() {
+		tgtPtr = tgtVal.Interface()
+	} else if tgtVal.CanAddr() {
+		tgtPtr = tgtVal.Addr().Interface()
+	} else {
+		return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
+	}
+	ok, err := cloner.CloneTo(tgtPtr)
+	if err != nil {
+		return err
+	}
+	if ok {
+		return nil
+	}
+	return kindCloner(srcVal.Type().Kind(), opts)(g, labels, tgtVal, srcVal, opts)
 }
 
 /*
@@ -141,7 +143,7 @@ bool ----> float(true:1, false:0)
 bool ----> pointer
 bool ----> struct
 */
-func boolCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func boolCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
@@ -193,7 +195,7 @@ int ----> string("i")
 int ----> pointer
 int ----> struct
 */
-func intCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func intCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
@@ -245,7 +247,7 @@ uint ----> string("u")
 uint ----> pointer
 uint ----> struct
 */
-func uintCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func uintCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
@@ -297,7 +299,7 @@ float ----> string("f")
 float ----> pointer
 float ----> struct
 */
-func floatCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func floatCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
@@ -351,7 +353,7 @@ string ----> float(strconv.ParseFloat)
 string ----> pointer
 string ----> struct
 */
-func stringCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func stringCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
@@ -437,7 +439,7 @@ string ----> float(strconv.ParseFloat)
 []byte ----> pointer
 []byte ----> struct
 */
-func bytesCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func bytesCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
@@ -522,7 +524,7 @@ time.IntToTime ----> uint(time.Unix)
 time.IntToTime ----> float(time.Unix)
 time.IntToTime ----> pointer
 */
-func timeCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func timeCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
@@ -570,7 +572,7 @@ func timeCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.V
 interfaceCloner 克隆interface类型
 interface ----> reflect.Value ----> valueCloner
 */
-func interfaceCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func interfaceCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if srcVal.IsNil() {
 		return nil
 	}
@@ -584,7 +586,7 @@ pointerCloner 克隆pointer类型
 pointer ----> noDeepClone ----> tgtPtr = srcPtr
 pointer ----> DeepClone ----> valueCloner
 */
-func pointerCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func pointerCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if srcVal.IsNil() {
 		return nil
 	}
@@ -621,7 +623,7 @@ slice ----> array,
 slice ----> any(slice),
 slice ----> pointer,
 */
-func sliceCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func sliceCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if srcVal.IsNil() {
 		return nil
 	}
@@ -651,7 +653,7 @@ array ----> slice,
 array ----> any(slice),
 array ----> pointer,
 */
-func arrayCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func arrayCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
@@ -678,7 +680,7 @@ func arrayCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.
 	}
 }
 
-func mapCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func mapCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if srcVal.IsNil() {
 		return nil
 	}
@@ -689,7 +691,7 @@ func mapCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Va
 	return cloner(g, labels, tgtVal, srcVal, opts)
 }
 
-func _mapCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func _mapCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	cloner, tv := indirect(tgtVal)
 	if cloner != nil {
 		ok, err := cloner.CloneFrom(srcVal.Interface())
@@ -732,7 +734,7 @@ struct ----> any(map[string]any)
 struct ----> map
 struct ----> pointer
 */
-func structCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func structCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	if !tgtVal.IsValid() {
 		return nil
 	}
@@ -847,7 +849,7 @@ func structCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect
 	}
 }
 
-func unsupportedTypeCloner(g *stackOverflowGuard, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
+func unsupportedTypeCloner(g *cloneContext, labels []string, tgtVal, srcVal reflect.Value, opts *options) error {
 	for _, hook := range opts.Cloners {
 		ok, err := hook(labels, tgtVal, srcVal)
 		if err != nil {

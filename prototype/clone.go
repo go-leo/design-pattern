@@ -11,17 +11,18 @@ import (
 type Cloner func(labels []string, tgtVal reflect.Value, srcVal reflect.Value) (bool, error)
 
 type options struct {
-	TagKey       string
-	DeepClone    bool
-	EqualFold    func(t, s string) bool
-	IntToTime    func(i int64) time.Time
-	StringToTime func(s string) (time.Time, error)
-	TimeToInt    func(t time.Time) int64
-	TimeToString func(t time.Time) string
-	GetterPrefix string
-	SetterPrefix string
-	Context      context.Context
-	Cloners      []Cloner
+	TagKey           string
+	DeepClone        bool
+	EqualFold        func(t, s string) bool
+	IntToTime        func(i int64) time.Time
+	StringToTime     func(s string) (time.Time, error)
+	TimeToInt        func(t time.Time) int64
+	TimeToString     func(t time.Time) string
+	GetterPrefix     string
+	SetterPrefix     string
+	Context          context.Context
+	Cloners          []Cloner
+	InterruptOnError bool
 }
 
 func (o *options) apply(opts ...Option) *options {
@@ -91,6 +92,12 @@ func Cloners(f ...Cloner) Option {
 	}
 }
 
+func InterruptOnError() Option {
+	return func(o *options) {
+		o.InterruptOnError = true
+	}
+}
+
 // Clone 将值从 src 克隆到 tgt
 func Clone(tgt any, src any, opts ...Option) error {
 	// 获取目标值的反射值
@@ -103,21 +110,18 @@ func Clone(tgt any, src any, opts ...Option) error {
 		return newNilError(reflect.TypeOf(tgt), reflect.TypeOf(src))
 	}
 
-	// 获取原值的反射值
-	srcVal := reflect.ValueOf(src)
-
-	// 从对象池中获取克隆状态上下文
-	ctx := newCloneContext()
-	// 克隆结束后，将克隆状态上下文放入对象池中
-	defer freeCloneContext(ctx)
-
 	// 初始化options
 	o := new(options).apply(opts...).correct()
 
+	// 从对象池中获取克隆状态上下文
+	ctx := newCloneContext(o)
+	// 克隆结束后，将克隆状态上下文放入对象池中
+	defer freeCloneContext(ctx)
+
 	// 处理对象克隆逻辑
-	return clone(ctx, tgtVal, srcVal, o)
+	return clone(ctx, tgtVal, reflect.ValueOf(src), o)
 }
 
-func clone(g *stackOverflowGuard, tgtVal, srcVal reflect.Value, opts *options) error {
+func clone(g *cloneContext, tgtVal, srcVal reflect.Value, opts *options) error {
 	return valueCloner(srcVal, opts)(g, []string{}, tgtVal, srcVal, opts)
 }
