@@ -544,10 +544,12 @@ func _NewStructInfo(typ reflect.Type) *_StructInfo {
 }
 
 func _CachedStructInfo(typ reflect.Type, opts *options) *_StructInfo {
-	if f, ok := structCache.Load(typ); ok {
+	val, _ := structCache.LoadOrStore(opts.TagKey, &sync.Map{})
+	taggedStructCache := val.(*sync.Map)
+	if f, ok := taggedStructCache.Load(typ); ok {
 		return f.(*_StructInfo)
 	}
-	f, _ := structCache.LoadOrStore(typ, _NewStructInfo(typ).Analysis(opts))
+	f, _ := taggedStructCache.LoadOrStore(typ, _NewStructInfo(typ).Analysis(opts))
 	return f.(*_StructInfo)
 }
 
