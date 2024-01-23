@@ -4,15 +4,15 @@ import "context"
 
 // Endpoint represents a single RPC method.
 type Endpoint[Req any, Resp any] interface {
-	Invoke(ctx context.Context, request Req) (Resp, error)
+	Invoke(ctx context.Context, req Req) (Resp, error)
 }
 
 // The EndpointFunc type is an adapter to allow the use of ordinary functions as Endpoint.
-type EndpointFunc[Req any, Resp any] func(ctx context.Context, request Req) (Resp, error)
+type EndpointFunc[Req any, Resp any] func(ctx context.Context, req Req) (Resp, error)
 
 // Invoke calls f(ctx).
-func (f EndpointFunc[Req, Resp]) Invoke(ctx context.Context, request Req) (Resp, error) {
-	return f(ctx, request)
+func (f EndpointFunc[Req, Resp]) Invoke(ctx context.Context, req Req) (Resp, error) {
+	return f(ctx, req)
 }
 
 // Noop is an endpoint that does nothing and returns a nil error.
