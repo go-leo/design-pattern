@@ -11,16 +11,17 @@ type CommandHandler[C any] interface {
 	Handle(ctx context.Context, cmd C) error
 }
 
-// The commandHandlerFunc type is an adapter to allow the use of ordinary functions as CommandHandler.
-type commandHandlerFunc[C any] struct {
-	f func(ctx context.Context, cmd C) error
-}
+// The CommandHandlerFunc type is an adapter to allow the use of ordinary functions as CommandHandler.
+type CommandHandlerFunc[C any] func(ctx context.Context, cmd C) error
 
 // Handle calls f(ctx).
-func (f commandHandlerFunc[C]) Handle(ctx context.Context, cmd C) error {
-	return f.f(ctx, cmd)
+func (f CommandHandlerFunc[C]) Handle(ctx context.Context, cmd C) error {
+	return f(ctx, cmd)
 }
 
-func CommandHandlerFunc[C any](f func(ctx context.Context, cmd C) error) CommandHandler[C] {
-	return commandHandlerFunc[C]{f: f}
+// NoopCommand is an CommandHandler that does nothing and returns a nil error.
+type NoopCommand[Q any, R any] struct{}
+
+func (NoopCommand[Q, R]) Handle(context.Context, Q) error {
+	return nil
 }
