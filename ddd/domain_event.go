@@ -10,7 +10,10 @@ import (
 // or it could be derived from various aspects of the event such as where, when and what
 // has happened.
 type DomainEvent[T any, ID any] interface {
+
+	// SameEventAs return true if the given domain event and this event are regarded as being the same event.
 	SameEventAs(other T) bool
+	
 	ID() ID
 	Kind() string
 	When() time.Time
