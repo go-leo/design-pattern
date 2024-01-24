@@ -1,24 +1,24 @@
 package decorator
 
-// Decorator allows us to write something like decorators to object.
+// Decorator allows us to write something like decorators to component.
 // It can execute something before invoke or after.
 type Decorator[T any] interface {
 	// Decorate wraps the underlying obj, adding some functionality.
-	Decorate(obj T) T
+	Decorate(component T) T
 }
 
-// The DecoratorFunc type is an adapter to allow the use of ordinary functions as Decorator.
-type DecoratorFunc[T any] func(obj T) T
+// Func is an adapter to allow the use of ordinary functions as Decorator.
+type Func[T any] func(component T) T
 
 // Decorate call f(obj).
-func (f DecoratorFunc[T]) Decorate(obj T) T {
-	return f(obj)
+func (f Func[T]) Decorate(component T) T {
+	return f(component)
 }
 
 // Chain decorates the given object with all middlewares.
-func Chain[T any](obj T, middlewares ...Decorator[T]) T {
+func Chain[T any](component T, middlewares ...Decorator[T]) T {
 	for i := len(middlewares) - 1; i >= 0; i-- {
-		obj = middlewares[i].Decorate(obj)
+		component = middlewares[i].Decorate(component)
 	}
-	return obj
+	return component
 }
