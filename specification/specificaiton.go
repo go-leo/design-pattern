@@ -4,7 +4,7 @@ import "context"
 
 // Specification interface.
 // Use BaseSpecification as base for creating specifications, and
-// only the method isSatisfiedBy(Object) must be implemented.
+// only the method predicate(Object) must be implemented.
 type Specification[T any] interface {
 	// IsSatisfiedBy check if t is satisfied by the specification.
 	IsSatisfiedBy(ctx context.Context, t T) bool
@@ -19,15 +19,15 @@ type Specification[T any] interface {
 }
 
 type BaseSpecification[T any] struct {
-	isSatisfiedBy func(ctx context.Context, t T) bool
+	predicate func(ctx context.Context, t T) bool
 }
 
-func New[T any](isSatisfiedBy func(ctx context.Context, t T) bool) Specification[T] {
-	return &BaseSpecification[T]{isSatisfiedBy: isSatisfiedBy}
+func New[T any](predicate func(ctx context.Context, t T) bool) Specification[T] {
+	return &BaseSpecification[T]{predicate: predicate}
 }
 
 func (spec *BaseSpecification[T]) IsSatisfiedBy(ctx context.Context, t T) bool {
-	return spec.isSatisfiedBy(ctx, t)
+	return spec.predicate(ctx, t)
 }
 
 func (spec *BaseSpecification[T]) And(another Specification[T]) Specification[T] {
