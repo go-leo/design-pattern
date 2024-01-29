@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"errors"
 	"github.com/go-leo/design-pattern/cqrs"
 )
 
@@ -26,6 +27,5 @@ type demoDefault struct {
 }
 
 func (h *demoDefault) Handle(ctx context.Context, q *DemoDefaultQuery) (*DemoDefaultResult, error) {
-	//TODO implement me
-	panic("implement me")
+	return nil, errors.New("this is error")
 }

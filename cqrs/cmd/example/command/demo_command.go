@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"github.com/go-leo/design-pattern/cqrs"
+	"log"
 )
 
 type DemoCommandAssembler[Req any] interface {
@@ -22,6 +23,6 @@ type demoCommand struct {
 }
 
 func (h *demoCommand) Handle(ctx context.Context, cmd *DemoCommandCmd) error {
-	//TODO implement me
-	panic("implement me")
+	log.Println("demo command")
+	return nil
 }

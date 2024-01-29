@@ -26,6 +26,5 @@ type demoQuery struct {
 }
 
 func (h *demoQuery) Handle(ctx context.Context, q *DemoQueryQuery) (*DemoQueryResult, error) {
-	//TODO implement me
-	panic("implement me")
+	return &DemoQueryResult{}, nil
 }

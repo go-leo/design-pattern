@@ -6,15 +6,15 @@ import (
 )
 
 // CommandEndpoint convert CommandHandler to Endpoint
-func CommandEndpoint[C any](h CommandHandler[C]) endpoint.Endpoint[C, struct{}] {
-	return endpoint.EndpointFunc[C, struct{}](func(ctx context.Context, request C) (struct{}, error) {
+func CommandEndpoint[Command any](h CommandHandler[Command]) endpoint.Endpoint[Command, struct{}] {
+	return endpoint.Func[Command, struct{}](func(ctx context.Context, request Command) (struct{}, error) {
 		return struct{}{}, h.Handle(ctx, request)
 	})
 }
 
 // QueryEndpoint convert QueryHandler to Endpoint
-func QueryEndpoint[Q any, R any](h QueryHandler[Q, R]) endpoint.Endpoint[Q, R] {
-	return endpoint.EndpointFunc[Q, R](func(ctx context.Context, request Q) (R, error) {
+func QueryEndpoint[Query any, Result any](h QueryHandler[Query, Result]) endpoint.Endpoint[Query, Result] {
+	return endpoint.Func[Query, Result](func(ctx context.Context, request Query) (Result, error) {
 		return h.Handle(ctx, request)
 	})
 }

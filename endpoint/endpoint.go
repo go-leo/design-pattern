@@ -7,11 +7,11 @@ type Endpoint[Req any, Resp any] interface {
 	Invoke(ctx context.Context, req Req) (Resp, error)
 }
 
-// The EndpointFunc type is an adapter to allow the use of ordinary functions as Endpoint.
-type EndpointFunc[Req any, Resp any] func(ctx context.Context, req Req) (Resp, error)
+// The Func type is an adapter to allow the use of ordinary functions as Endpoint.
+type Func[Req any, Resp any] func(ctx context.Context, req Req) (Resp, error)
 
 // Invoke calls f(ctx).
-func (f EndpointFunc[Req, Resp]) Invoke(ctx context.Context, req Req) (Resp, error) {
+func (f Func[Req, Resp]) Invoke(ctx context.Context, req Req) (Resp, error) {
 	return f(ctx, req)
 }
 
@@ -25,4 +25,4 @@ func (Noop[Req, Resp]) Invoke(context.Context, Req) (Resp, error) {
 
 type AnyEndpoint Endpoint[any, any]
 
-type AnyEndpointFunc EndpointFunc[any, any]
+type AnyEndpointFunc Func[any, any]

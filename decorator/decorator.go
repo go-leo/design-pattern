@@ -16,9 +16,9 @@ func (f Func[T]) Decorate(component T) T {
 }
 
 // Chain decorates the given object with all middlewares.
-func Chain[T any](component T, middlewares ...Decorator[T]) T {
-	for i := len(middlewares) - 1; i >= 0; i-- {
-		component = middlewares[i].Decorate(component)
+func Chain[T any](component T, decorators ...Decorator[T]) T {
+	for i := len(decorators) - 1; i >= 0; i-- {
+		component = decorators[i].Decorate(component)
 	}
 	return component
 }

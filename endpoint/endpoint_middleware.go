@@ -1,26 +1,15 @@
 package endpoint
 
-// Middleware allows us to write something like decorators to Endpoint.
-// It can execute something before invoke or after.
-type Middleware[Request any, Response any] interface {
-	// Decorate wraps the underlying Endpoint, adding some functionality.
-	Decorate(ep Endpoint[Request, Response]) Endpoint[Request, Response]
-}
+import "github.com/go-leo/design-pattern/decorator"
 
-// The MiddlewareFunc type is an adapter to allow the use of ordinary functions as Middleware.
-type MiddlewareFunc[Request any, Response any] func(ep Endpoint[Request, Response]) Endpoint[Request, Response]
+type Decorator[Req any, Resp any] decorator.Decorator[Endpoint[Req, Resp]]
 
-// Decorate call f(endpoint).
-func (f MiddlewareFunc[Request, Response]) Decorate(ep Endpoint[Request, Response]) Endpoint[Request, Response] {
-	return f(ep)
-}
+type DecoratorFunc[Req any, Resp any] decorator.Func[Endpoint[Req, Resp]]
 
-// Chain decorates the given Endpoint with all middlewares.
-func Chain[Q any, R any](ep Endpoint[Q, R], middlewares ...Middleware[Q, R]) Endpoint[Q, R] {
-	var chain Endpoint[Q, R]
-	chain = ep
-	for i := len(middlewares) - 1; i >= 0; i-- {
-		chain = middlewares[i].Decorate(chain)
+func Chain[Req any, Resp any](ep Endpoint[Req, Resp], middlewares ...Decorator[Req, Resp]) Endpoint[Req, Resp] {
+	decorators := make([]decorator.Decorator[Endpoint[Req, Resp]], 0, len(middlewares))
+	for _, middleware := range middlewares {
+		decorators = append(decorators, middleware)
 	}
-	return chain
+	return decorator.Chain[Endpoint[Req, Resp]](ep, decorators...)
 }
