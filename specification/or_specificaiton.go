@@ -2,17 +2,13 @@ package specification
 
 import "context"
 
-// OrSpecification used to create a new specification that is the OR of two other specifications.
-type OrSpecification[T any] struct {
-	BaseSpecification[T]
-	left  Specification[T]
-	right Specification[T]
+// or used to create a new base that is the OR of two other specifications.
+type or[T any] struct {
+	base[T]
+	Left  Specification[T]
+	Right Specification[T]
 }
 
-func Or[T any](left Specification[T], right Specification[T]) Specification[T] {
-	return &OrSpecification[T]{left: left, right: right}
-}
-
-func (spec *OrSpecification[T]) IsSatisfiedBy(ctx context.Context, t T) bool {
-	return spec.left.IsSatisfiedBy(ctx, t) || spec.right.IsSatisfiedBy(ctx, t)
+func (spec *or[T]) IsSatisfiedBy(ctx context.Context, t T) bool {
+	return spec.Left.IsSatisfiedBy(ctx, t) || spec.Right.IsSatisfiedBy(ctx, t)
 }

@@ -37,14 +37,14 @@ type Bus interface {
 	// RegisterQuery register QueryHandler
 	RegisterQuery(handler any) error
 
-	// Exec sync execute command
+	// Exec synchronously execute command
 	Exec(ctx context.Context, cmd any) error
-	// Query sync query Query
+	// Query synchronously query Query
 	Query(ctx context.Context, q any) (any, error)
 
-	// AsyncExec async execute command
+	// AsyncExec asynchronously execute command
 	AsyncExec(ctx context.Context, cmd any) <-chan error
-	// AsyncQuery async query Query
+	// AsyncQuery asynchronously query Query
 	AsyncQuery(ctx context.Context, q any) (<-chan any, <-chan error)
 
 	// Close bus gracefully

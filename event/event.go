@@ -1,4 +1,4 @@
 package event
 
-type Event struct {
+type Event interface {
 }

@@ -9,9 +9,6 @@ import (
 	"log"
 )
 
-type Querys interface {
-}
-
 func main() {
 	bus := cqrs.NewBus()
 	err := errors.Join(
