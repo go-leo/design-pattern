@@ -2,9 +2,9 @@ package specification
 
 import "context"
 
-// Not used to create a new base that is the inverse (NOT) of the given Spec.
+// Not used to create a new specification that is the inverse (NOT) of the given Spec.
 type not[T any] struct {
-	base[T]
+	specification[T]
 	Spec Specification[T]
 }
 

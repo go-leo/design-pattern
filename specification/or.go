@@ -2,9 +2,9 @@ package specification
 
 import "context"
 
-// or used to create a new base that is the OR of two other specifications.
+// or used to create a new specification that is the OR of two other specifications.
 type or[T any] struct {
-	base[T]
+	specification[T]
 	Left  Specification[T]
 	Right Specification[T]
 }

@@ -2,9 +2,9 @@ package specification
 
 import "context"
 
-// conjunction used to create a new base that is the OR of two other specifications.
+// conjunction used to create a new specification that is the OR of two other specifications.
 type conjunction[T any] struct {
-	base[T]
+	specification[T]
 	Specs []Specification[T]
 }
 

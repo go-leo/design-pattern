@@ -2,9 +2,9 @@ package specification
 
 import "context"
 
-// and used to create a new base that is the AND of two other specifications.
+// and used to create a new specification that is the AND of two other specifications.
 type and[T any] struct {
-	base[T]
+	specification[T]
 	Left  Specification[T]
 	Right Specification[T]
 }
