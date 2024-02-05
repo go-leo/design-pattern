@@ -2,48 +2,34 @@ package cqrs
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/go-leo/gox/contextx"
 	"github.com/go-leo/gox/errorx"
 	"github.com/go-leo/gox/syncx"
 	"github.com/go-leo/gox/syncx/chanx"
-	"github.com/go-leo/gox/syncx/gopher"
-	"github.com/go-leo/gox/syncx/gopher/sample"
 	"reflect"
 	"sync"
 	"sync/atomic"
 )
 
-var (
-	// ErrHandlerNil CommandHandler or QueryHandler is nil
-	ErrHandlerNil = errors.New("handler is nil")
-	// ErrRegistered not register CommandHandler or QueryHandler
-	ErrRegistered = errors.New("handler registered")
-	// ErrCommandNil Command arg is nil
-	ErrCommandNil = errors.New("command is nil")
-	// ErrQueryNil Query arg is nil
-	ErrQueryNil = errors.New("query is nil")
-	// ErrUnimplemented handler is not implement CommandHandler or QueryHandler
-	ErrUnimplemented = errors.New("handler is not implement CommandHandler or QueryHandler")
-	// ErrBusClosed bus is closed
-	ErrBusClosed = errors.New("bus is closed")
-)
-
 // Bus is a bus, register CommandHandler and QueryHandler, execute Command and query Query
 type Bus interface {
+
 	// RegisterCommand register CommandHandler
 	RegisterCommand(handler any) error
+
 	// RegisterQuery register QueryHandler
 	RegisterQuery(handler any) error
 
 	// Exec synchronously execute command
 	Exec(ctx context.Context, cmd any) error
+
 	// Query synchronously query Query
 	Query(ctx context.Context, q any) (any, error)
 
 	// AsyncExec asynchronously execute command
 	AsyncExec(ctx context.Context, cmd any) <-chan error
+
 	// AsyncQuery asynchronously query Query
 	AsyncQuery(ctx context.Context, q any) (<-chan any, <-chan error)
 
@@ -144,7 +130,7 @@ func (b *bus) Exec(ctx context.Context, cmd any) error {
 	}
 	value, ok := b.commands.Load(reflect.TypeOf(cmd))
 	if !ok {
-		return errors.New("handler unregistered")
+		return ErrUnregistered
 	}
 	info := value.(*handlerInfo)
 	resultValues := info.handlerMethod.Func.Call(
@@ -169,7 +155,7 @@ func (b *bus) Query(ctx context.Context, q any) (any, error) {
 	}
 	value, ok := b.queries.Load(reflect.TypeOf(q))
 	if !ok {
-		return nil, errors.New("handler unregistered")
+		return nil, ErrUnregistered
 	}
 	info := value.(*handlerInfo)
 	resultValues := info.handlerMethod.Func.Call(
@@ -251,37 +237,4 @@ type handlerInfo struct {
 	handlerVal    reflect.Value
 	handlerMethod reflect.Method
 	inType        reflect.Type
-}
-
-type option struct {
-	Pool gopher.Gopher
-}
-
-func newOption(opts ...Option) *option {
-	o := &option{}
-	for _, opt := range opts {
-		opt(o)
-	}
-	if o.Pool == nil {
-		o.Pool = sample.Gopher{}
-	}
-	return o
-}
-
-type Option func(*option)
-
-func Pool(pool gopher.Gopher) Option {
-	return func(o *option) {
-		o.Pool = pool
-	}
-}
-
-func NewBus(opts ...Option) Bus {
-	return &bus{
-		commands:   sync.Map{},
-		queries:    sync.Map{},
-		wg:         sync.WaitGroup{},
-		inShutdown: atomic.Bool{},
-		options:    newOption(opts...),
-	}
 }
