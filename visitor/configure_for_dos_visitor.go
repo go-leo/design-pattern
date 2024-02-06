@@ -2,6 +2,8 @@ package main
 
 import "fmt"
 
+// ConfigureForDosVisitor implements both zoom's and  hayes' visit method for Dos
+// manufacturer.
 type ConfigureForDosVisitor struct{}
 
 func (receiver ConfigureForDosVisitor) Visit(modem Modem) {

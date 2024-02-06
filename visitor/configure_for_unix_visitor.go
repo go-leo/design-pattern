@@ -4,6 +4,8 @@ import (
 	"fmt"
 )
 
+// ConfigureForUnixVisitor implements zoom's visit method for Unix manufacturer, unlike
+// traditional visitor pattern, this class may selectively implement visit for other modems.
 type ConfigureForUnixVisitor struct{}
 
 func (receiver ConfigureForUnixVisitor) Visit(modem Modem) {
