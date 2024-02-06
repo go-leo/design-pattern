@@ -12,23 +12,6 @@ import (
 	"sync/atomic"
 )
 
-var (
-	// ErrListenerNil event listener is nil
-	ErrListenerNil = errors.New("event listener is nil")
-
-	// ErrEventNil event is nil
-	ErrEventNil = errors.New("event is nil")
-
-	// ErrEventStruct event's kind is not struct
-	ErrEventStruct = errors.New("event's kind is not struct")
-
-	// ErrListenerRegistered event listener registered
-	ErrListenerRegistered = errors.New("event listener registered")
-
-	// ErrBusClosed bus is closed
-	ErrBusClosed = errors.New("bus is closed")
-)
-
 type Bus interface {
 	// On adds a Listener to the event bus.
 	On(listener any) error
