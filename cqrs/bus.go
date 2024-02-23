@@ -2,11 +2,9 @@ package cqrs
 
 import (
 	"context"
-	"fmt"
 	"github.com/go-leo/gox/contextx"
 	"github.com/go-leo/gox/errorx"
 	"github.com/go-leo/gox/syncx"
-	"github.com/go-leo/gox/syncx/chanx"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -172,34 +170,28 @@ func (b *bus) Query(ctx context.Context, q any) (any, error) {
 }
 
 func (b *bus) AsyncExec(ctx context.Context, cmd any) <-chan error {
-	errC := make(chan error, 1)
+	errC := make(chan error, 2)
 	b.wg.Add(1)
 	err := b.options.Pool.Go(func() {
 		defer b.wg.Done()
-		defer close(errC)
 		err := b.Exec(ctx, cmd)
 		if err != nil {
 			errC <- err
 			return
 		}
 	})
-	if err == nil {
-		return errC
+	if err != nil {
+		errC <- err
 	}
-	goErrC := make(chan error, 1)
-	goErrC <- fmt.Errorf("failed to go, %w", err)
-	close(goErrC)
-	return chanx.Combine(goErrC, errC)
+	return errC
 }
 
 func (b *bus) AsyncQuery(ctx context.Context, q any) (<-chan any, <-chan error) {
+	errC := make(chan error, 2)
 	resC := make(chan any, 1)
-	errC := make(chan error, 1)
 	b.wg.Add(1)
 	err := b.options.Pool.Go(func() {
 		defer b.wg.Done()
-		defer close(resC)
-		defer close(errC)
 		res, err := b.Query(ctx, q)
 		if err != nil {
 			errC <- err
@@ -208,12 +200,9 @@ func (b *bus) AsyncQuery(ctx context.Context, q any) (<-chan any, <-chan error) 
 		resC <- res
 	})
 	if err == nil {
-		return resC, errC
+		errC <- err
 	}
-	goErrC := make(chan error, 1)
-	goErrC <- fmt.Errorf("failed to go, %w", err)
-	close(goErrC)
-	return resC, chanx.Combine(goErrC, errC)
+	return resC, errC
 }
 
 func (b *bus) Close(ctx context.Context) error {
