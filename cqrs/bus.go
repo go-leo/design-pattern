@@ -217,16 +217,15 @@ func (b *bus) AsyncQuery(ctx context.Context, q any) (<-chan any, <-chan error) 
 }
 
 func (b *bus) Close(ctx context.Context) error {
-	b.inShutdown.Store(true)
-	c := syncx.WaitNotify(&b.wg)
-	for {
+	if b.inShutdown.CompareAndSwap(false, true) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-c:
+		case <-syncx.WaitNotify(&b.wg):
 			return nil
 		}
 	}
+	return ErrBusClosed
 }
 
 func (b *bus) shuttingDown() bool {

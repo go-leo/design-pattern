@@ -21,6 +21,6 @@ var (
 	// ErrUnimplemented handler is not implement CommandHandler or QueryHandler
 	ErrUnimplemented = errors.New("handler is not implement CommandHandler or QueryHandler")
 
-	// ErrBusClosed bus is closed
-	ErrBusClosed = errors.New("bus is closed")
+	// ErrBusClosed bus was closed
+	ErrBusClosed = errors.New("bus was closed")
 )

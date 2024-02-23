@@ -12,6 +12,6 @@ type StoredEvent struct {
 	TypeName   string
 }
 
-func (e StoredEvent) toDomainEvent() event.Event {
+func (e StoredEvent) toDomainEvent() event.event {
 	return nil
 }

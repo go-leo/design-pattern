@@ -1,23 +1,32 @@
 package event
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"reflect"
+)
 
 var (
-	// ErrHandlerNil CommandHandler or QueryHandler is nil
-	ErrHandlerNil = errors.New("handler is nil")
+	// ErrListenerNil listener is nil
+	ErrListenerNil = errors.New("listener is nil")
 
-	// ErrRegistered not register CommandHandler or QueryHandler
-	ErrRegistered = errors.New("handler registered")
+	// ErrEventNil event is nil
+	ErrEventNil = errors.New("event is nil")
 
-	// ErrCommandNil Command arg is nil
-	ErrCommandNil = errors.New("command is nil")
+	// ErrBusClosed bus was closed
+	ErrBusClosed = errors.New("bus was closed")
 
-	// ErrQueryNil Query arg is nil
-	ErrQueryNil = errors.New("query is nil")
+	// ErrEventTypeInvalid event type is invalid
+	ErrEventTypeInvalid = errors.New("event type is invalid")
 
-	// ErrUnimplemented handler is not implement CommandHandler or QueryHandler
-	ErrUnimplemented = errors.New("handler is not implement CommandHandler or QueryHandler")
-
-	// ErrBusClosed bus is closed
-	ErrBusClosed = errors.New("bus is closed")
+	// ErrListenerIncomparable listener is incomparable
+	ErrListenerIncomparable = errors.New("listener is incomparable")
 )
+
+type ErrListener struct {
+	EventType reflect.Type
+}
+
+func (e ErrListener) Error() string {
+	return fmt.Sprintf("%s listener not found", e.EventType)
+}

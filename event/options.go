@@ -8,7 +8,8 @@ import (
 )
 
 type option struct {
-	Pool gopher.Gopher
+	Pool       gopher.Gopher
+	MaxBackoff int
 }
 
 func newOption(opts ...Option) *option {
@@ -19,6 +20,9 @@ func newOption(opts ...Option) *option {
 	if o.Pool == nil {
 		o.Pool = sample.Gopher{}
 	}
+	if o.MaxBackoff == 0 {
+		o.MaxBackoff = 16
+	}
 	return o
 }
 
@@ -27,6 +31,12 @@ type Option func(*option)
 func Pool(pool gopher.Gopher) Option {
 	return func(o *option) {
 		o.Pool = pool
+	}
+}
+
+func MaxBackoff(backoff int) Option {
+	return func(o *option) {
+		o.MaxBackoff = backoff
 	}
 }
 
