@@ -483,7 +483,7 @@ func TestFloatCloner(t *testing.T) {
 	var tgtInt16 uint16
 	err = prototype.Clone(&tgtInt16, srcFloat32)
 	assert.NoError(t, err)
-	assert.EqualValues(t, srcFloat32, tgtInt16)
+	assert.EqualValues(t, uint16(srcFloat32), tgtInt16)
 
 	var tgtFloat32 float32
 	err = prototype.Clone(&tgtFloat32, srcFloat32)
@@ -500,7 +500,7 @@ func TestFloatCloner(t *testing.T) {
 	tgtInt = 0
 	err = prototype.Clone(&tgtInt, srcFloat64)
 	assert.NoError(t, err)
-	assert.EqualValues(t, srcFloat64, tgtInt)
+	assert.EqualValues(t, int(srcFloat64), tgtInt)
 
 	srcFloat64 = 300.5
 	tgtInt8 = 0
@@ -511,7 +511,7 @@ func TestFloatCloner(t *testing.T) {
 	tgtInt16 = 0
 	err = prototype.Clone(&tgtInt16, srcFloat64)
 	assert.NoError(t, err)
-	assert.EqualValues(t, srcFloat64, tgtInt16)
+	assert.EqualValues(t, uint16(srcFloat64), tgtInt16)
 
 	tgtFloat32 = 0
 	err = prototype.Clone(&tgtFloat32, srcFloat64)
