@@ -13,16 +13,6 @@ var TagKey = prototype.TagKey
 
 var DisableDeepClone = prototype.DisableDeepClone
 
-var EqualFold = prototype.EqualFold
-
-var IntToTime = prototype.IntToTime
-
-var StringToTime = prototype.StringToTime
-
-var TimeToInt = prototype.TimeToInt
-
-var TimeToString = prototype.TimeToString
-
 var GetterPrefix = prototype.GetterPrefix
 
 var SetterPrefix = prototype.SetterPrefix
