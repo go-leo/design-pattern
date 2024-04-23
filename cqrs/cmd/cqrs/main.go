@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/go-leo/cqrs/cmd/cqrs/gen"
+	"github.com/go-leo/design-pattern/cqrs/cmd/cqrs/gen"
 )
 
 func main() {
