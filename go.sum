@@ -3,6 +3,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/go-leo/gox v0.0.0-20240424095953-68bffa755bc0 h1:177OSMkJjA8hIXz9qHNyB7t2e6ZbePRS1D/+VAo07cg=
 github.com/go-leo/gox v0.0.0-20240424095953-68bffa755bc0/go.mod h1:BNpq/UYhlTTilt6rBVUVjsdF7IO0jttSMmkfYuZlf5Q=
+github.com/go-leo/gox v0.0.0-20240712084429-3a61c23af5fd h1:oyJhnS75cDFwQBL9XkXjwQfo7iDxK6KPFAek1XM/aMk=
+github.com/go-leo/gox v0.0.0-20240712084429-3a61c23af5fd/go.mod h1:fPIb8uqqwaZw6oEpbpKoGPtAhI3q24s+WTEnlEIoVpw=
 github.com/go-leo/prototype v0.0.0-20240313053805-7323480756d3 h1:lYlVSuFowAg9cdwPosuVudNZjO3AVMKdb4KWowRLbM8=
 github.com/go-leo/prototype v0.0.0-20240313053805-7323480756d3/go.mod h1:PWUg3fpxnjU1j+yECEQ5CCEZm2ilF8tZbHLwO32JyYY=
 github.com/golang/protobuf v1.5.0/go.mod h1:FsONVRAS9T7sI+LIUmWTfcYkHO4aIWwzhcaSAoJOfIk=

@@ -8,11 +8,10 @@ import (
 	"github.com/go-leo/gox/errorx"
 	"github.com/go-leo/gox/syncx/gopher"
 	"github.com/go-leo/gox/syncx/gopher/sample"
+	"github.com/go-leo/gox/syncx/groupx"
 	"reflect"
 	"sync"
 	"sync/atomic"
-
-	"github.com/go-leo/gox/syncx"
 )
 
 var (
@@ -137,7 +136,7 @@ func (b *defaultBus) Close(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-syncx.WaitNotify(b.wg):
+		case <-groupx.WaitNotify(b.wg):
 			return nil
 		}
 	}

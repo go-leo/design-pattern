@@ -3,7 +3,7 @@ module github.com/go-leo/design-pattern
 go 1.20
 
 require (
-	github.com/go-leo/gox v0.0.0-20240424095953-68bffa755bc0
+	github.com/go-leo/gox v0.0.0-20240712084429-3a61c23af5fd
 	github.com/go-leo/prototype v0.0.0-20240313053805-7323480756d3
 	github.com/google/uuid v1.6.0
 	github.com/json-iterator/go v1.1.12
