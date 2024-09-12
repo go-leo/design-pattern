@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"github.com/go-leo/gox/contextx"
 	"github.com/go-leo/gox/errorx"
+	"github.com/go-leo/gox/syncx"
 	"github.com/go-leo/gox/syncx/gopher"
 	"github.com/go-leo/gox/syncx/gopher/sample"
-	"github.com/go-leo/gox/syncx/groupx"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -136,7 +136,7 @@ func (b *defaultBus) Close(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-groupx.WaitNotify(b.wg):
+		case <-syncx.WaitNotify(b.wg):
 			return nil
 		}
 	}
