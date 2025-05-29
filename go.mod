@@ -1,6 +1,8 @@
 module github.com/go-leo/design-pattern
 
-go 1.20
+go 1.21
+
+toolchain go1.24.1
 
 require (
 	github.com/go-leo/gox v0.0.0-20240912065615-60fd97213283
